@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.order.mapper.OrderDocumentMapper">
+
+    <!-- 客户报价单摘要 -->
+    <select id="selectCustomerQuoteSummary" resultType="com.telecom.scm.order.mapper.OrderQuoteSummaryRow">
+        SELECT
+            o.order_no AS orderNo,
+            customer.company_name AS customerName,
+            merchant.shop_name AS merchantName,
+            o.receiver_name AS receiverName,
+            o.receiver_phone AS receiverPhone,
+            CONCAT(o.receiver_province, o.receiver_city, o.receiver_district, o.receiver_address) AS receiverAddress,
+            o.goods_amount AS goodsAmount,
+            o.freight_amount AS freightAmount,
+            o.pay_amount AS payAmount,
+            DATE_FORMAT(o.created_time, '%Y-%m-%d %H:%i') AS createdAt
+        FROM order_info o
+        LEFT JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = o.merchant_id
+            AND merchant.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        LIMIT 1
+    </select>
+
+    <!-- 商家报价单摘要 -->
+    <select id="selectMerchantQuoteSummary" resultType="com.telecom.scm.order.mapper.OrderQuoteSummaryRow">
+        SELECT
+            o.order_no AS orderNo,
+            customer.company_name AS customerName,
+            merchant.shop_name AS merchantName,
+            o.receiver_name AS receiverName,
+            o.receiver_phone AS receiverPhone,
+            CONCAT(o.receiver_province, o.receiver_city, o.receiver_district, o.receiver_address) AS receiverAddress,
+            o.goods_amount AS goodsAmount,
+            o.freight_amount AS freightAmount,
+            o.pay_amount AS payAmount,
+            DATE_FORMAT(o.created_time, '%Y-%m-%d %H:%i') AS createdAt
+        FROM order_info o
+        LEFT JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = o.merchant_id
+            AND merchant.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND merchant.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        LIMIT 1
+    </select>
+
+    <!-- 客户订单访问权限校验 -->
+    <select id="selectCustomerOrderAccess" resultType="java.lang.String">
+        SELECT o.order_no
+        FROM order_info o
+        JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        LIMIT 1
+    </select>
+
+    <!-- 商家订单访问权限校验 -->
+    <select id="selectMerchantOrderAccess" resultType="java.lang.String">
+        SELECT o.order_no
+        FROM order_info o
+        JOIN merchant_info merchant ON merchant.id = o.merchant_id
+            AND merchant.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND merchant.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        LIMIT 1
+    </select>
+
+</mapper>

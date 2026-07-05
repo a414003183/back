@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.mall.mapper.MallProductMapper">
+
+    <sql id="productBaseColumns">
+        mg.id AS id,
+        mg.id AS merchant_goods_id,
+        sku.id AS sku_id,
+        spu.spu_name AS name,
+        brand.brand_name AS brand,
+        spu.brand_id AS brand_id,
+        category.category_name AS category,
+        category.id AS category_id,
+        COALESCE(parent_cat.category_name, '') AS parent_category,
+        COALESCE(root_cat.category_name, '') AS root_category,
+        COALESCE(spu.description, mg.detail_content, '') AS summary,
+        mg.sale_price AS price,
+        mg.freight_amount AS freight_amount,
+        mg.sale_price AS member_price,
+        CASE WHEN mg.supplier_id IS NOT NULL THEN LEAST(COALESCE(mg.stock_qty, sku.stock_qty), sku.stock_qty) ELSE COALESCE(mg.stock_qty, sku.stock_qty, 0) END AS stock,
+        sku.spec_text AS specs,
+        '确认后 48 小时内发货' AS lead_time,
+        CASE WHEN mg.delivery_mode = 'PROJECT' THEN '项目交付' ELSE '现货' END AS badge,
+        COALESCE(mg.main_image_id, spu.main_image_id) AS main_image_id,
+        COALESCE(mg.image_ids, spu.image_ids) AS image_ids,
+        COALESCE(mg.keywords, spu.keywords) AS keywords,
+        mg.detail_content AS detail_content,
+        m.shop_name AS shop_name,
+        COALESCE(mg.sale_count, 0) AS sale_count,
+        mg.merchant_id AS merchant_id
+    </sql>
+
+    <sql id="productFromJoins">
+        FROM merchant_goods mg
+        JOIN product_sku sku ON sku.id = mg.sku_id AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id AND spu.deleted = 0
+        JOIN product_brand brand ON brand.id = spu.brand_id AND brand.deleted = 0
+        JOIN product_category category ON category.id = spu.category_id AND category.deleted = 0
+        LEFT JOIN product_category parent_cat ON parent_cat.id = category.parent_id AND parent_cat.deleted = 0
+        LEFT JOIN product_category root_cat ON root_cat.id = parent_cat.parent_id AND root_cat.deleted = 0
+        JOIN merchant_info m ON m.id = mg.merchant_id AND m.deleted = 0
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = mg.merchant_id
+            AND relation_row.supplier_id = mg.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.merchant_id = mg.merchant_id
+            AND auth_row.supplier_id = mg.supplier_id
+            AND auth_row.supplier_sku_id = mg.sku_id
+            AND auth_row.deleted = 0
+    </sql>
+
+    <sql id="productBaseWhere">
+        WHERE mg.deleted = 0
+            AND mg.sale_status = 'ON'
+            AND (
+                mg.supplier_id IS NULL
+                OR (
+                    relation_row.status = 'ACTIVE'
+                    AND auth_row.auth_status = 'ACTIVE'
+                )
+            )
+    </sql>
+
+    <select id="selectProductRows" resultType="com.telecom.scm.mall.mapper.ProductRow">
+        SELECT
+            <include refid="productBaseColumns"/>
+        <include refid="productFromJoins"/>
+        <include refid="productBaseWhere"/>
+        ORDER BY mg.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countProductRows" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        <include refid="productFromJoins"/>
+        <include refid="productBaseWhere"/>
+    </select>
+
+    <select id="selectProductRowById" resultType="com.telecom.scm.mall.mapper.ProductRow">
+        SELECT
+            <include refid="productBaseColumns"/>
+        <include refid="productFromJoins"/>
+        <include refid="productBaseWhere"/>
+            AND mg.id = #{id}
+        LIMIT 1
+    </select>
+
+    <select id="selectProductRowsByMerchantId" resultType="com.telecom.scm.mall.mapper.ProductRow">
+        SELECT
+            <include refid="productBaseColumns"/>
+        <include refid="productFromJoins"/>
+        <include refid="productBaseWhere"/>
+            AND mg.merchant_id = #{merchantId}
+        ORDER BY mg.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countProductRowsByMerchantId" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        <include refid="productFromJoins"/>
+        <include refid="productBaseWhere"/>
+            AND mg.merchant_id = #{merchantId}
+    </select>
+
+</mapper>

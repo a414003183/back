@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.security.mapper.SecurityUserMapper">
+
+    <!-- 根据用户名查询管理员身份 -->
+    <select id="selectAdminByUsername" resultType="com.telecom.scm.security.mapper.SecurityUserRow">
+        SELECT
+            u.id AS user_id,
+            u.username AS username,
+            u.password AS password_hash,
+            r.role_code AS role_code,
+            'ADMIN' AS identity_type,
+            NULL AS member_id,
+            COALESCE(u.nick_name, u.username) AS display_name
+        FROM sys_user u
+        JOIN sys_user_role ur ON ur.user_id = u.id
+        JOIN sys_role r ON r.id = ur.role_id
+            AND r.deleted = 0
+            AND r.status = 'ENABLED'
+            AND r.role_code = 'ADMIN'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND (u.username = #{username} OR u.phone = #{username})
+        LIMIT 1
+    </select>
+
+    <!-- 根据用户名和身份类型查询会员身份 -->
+    <select id="selectMemberIdentityByUsername" resultType="com.telecom.scm.security.mapper.SecurityUserRow">
+        SELECT
+            u.id AS user_id,
+            u.username AS username,
+            u.password AS password_hash,
+            binding.identity_type AS role_code,
+            binding.identity_type AS identity_type,
+            binding.identity_ref_id AS member_id,
+            COALESCE(member_account.member_name, u.nick_name, u.username) AS display_name
+        FROM sys_user u
+        JOIN user_identity_binding binding ON binding.user_id = u.id
+            AND binding.deleted = 0
+            AND binding.status = 'ENABLED'
+            AND binding.identity_type = #{identityType}
+        JOIN sys_role r ON r.role_code = binding.identity_type
+            AND r.deleted = 0
+            AND r.status = 'ENABLED'
+        LEFT JOIN member_account member_account ON member_account.id = binding.identity_ref_id
+            AND member_account.deleted = 0
+            AND member_account.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND (u.username = #{username} OR u.phone = #{username})
+        ORDER BY binding.is_default DESC, binding.id DESC
+        LIMIT 1
+    </select>
+
+    <!-- 根据用户名查询可选身份列表 -->
+    <select id="selectIdentityRowsByUsername" resultType="com.telecom.scm.security.mapper.SecurityIdentityRow">
+        SELECT *
+        FROM (
+            SELECT
+                u.id AS user_id,
+                'ADMIN' AS identity_type,
+                COALESCE(u.nick_name, u.username) AS display_name,
+                'ENABLED' AS status,
+                1 AS default_identity,
+                NULL AS member_id
+            FROM sys_user u
+            JOIN sys_user_role ur ON ur.user_id = u.id
+            JOIN sys_role r ON r.id = ur.role_id
+                AND r.deleted = 0
+                AND r.status = 'ENABLED'
+                AND r.role_code = 'ADMIN'
+            WHERE u.deleted = 0
+                AND u.status = 'ENABLED'
+                AND (u.username = #{username} OR u.phone = #{username})
+
+            UNION ALL
+
+            SELECT
+                u.id AS user_id,
+                binding.identity_type AS identity_type,
+                COALESCE(member_account.member_name, u.nick_name, u.username) AS display_name,
+                binding.status AS status,
+                binding.is_default AS default_identity,
+                binding.identity_ref_id AS member_id
+            FROM sys_user u
+            JOIN user_identity_binding binding ON binding.user_id = u.id
+                AND binding.deleted = 0
+            LEFT JOIN member_account member_account ON member_account.id = binding.identity_ref_id
+                AND member_account.deleted = 0
+            WHERE u.deleted = 0
+                AND u.status = 'ENABLED'
+                AND (u.username = #{username} OR u.phone = #{username})
+        ) identity_rows
+        ORDER BY default_identity DESC,
+            FIELD(status, 'ENABLED', 'PENDING', 'REJECTED', 'DISABLED'),
+            identity_type ASC
+    </select>
+
+    <!-- 根据用户名和角色查询路由菜单 -->
+    <select id="selectRouteMenusByUsernameAndRole" resultType="com.telecom.scm.security.mapper.SecurityUserMenuRow">
+        SELECT DISTINCT
+            menu.id AS id,
+            menu.parent_id AS parentId,
+            menu.menu_name AS menuName,
+            menu.path AS path,
+            menu.component AS component,
+            menu.icon AS icon,
+            menu.permission_code AS permissionCode,
+            menu.sort_no AS sortNo,
+            menu.visible AS visible
+        FROM sys_role role
+        JOIN sys_role_menu role_menu ON role_menu.role_id = role.id
+        JOIN sys_menu menu ON menu.id = role_menu.menu_id
+            AND menu.deleted = 0
+            AND menu.status = 'ENABLED'
+        WHERE role.deleted = 0
+            AND role.status = 'ENABLED'
+            AND role.role_code = #{roleCode}
+            AND menu.menu_type = 'MENU'
+            AND menu.path IS NOT NULL
+            AND menu.path != ''
+        ORDER BY menu.parent_id ASC, menu.sort_no ASC, menu.id ASC
+    </select>
+
+</mapper>

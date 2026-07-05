@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.order.mapper.OrderQueryMapper">
+
+    <!-- 订单基础信息 -->
+    <select id="selectOrderBaseInfo" resultType="com.telecom.scm.order.mapper.OrderBaseInfoRow">
+        SELECT
+            CAST(o.id AS CHAR) AS id,
+            o.order_no AS orderNo,
+            COALESCE(NULLIF(customer.company_name, ''), ma.member_name) AS customerName,
+            merchant.shop_name AS merchantName,
+            o.order_status AS orderStatus,
+            o.pay_status AS payStatus,
+            o.shipment_status AS shipmentStatus,
+            o.aftersale_status AS aftersaleStatus,
+            DATE_FORMAT(o.created_time, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM order_info o
+        LEFT JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        LEFT JOIN member_account ma ON ma.id = customer.member_id AND ma.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = o.merchant_id
+            AND merchant.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+        LIMIT 1
+    </select>
+
+    <!-- 商家端订单详情 -->
+    <select id="selectMerchantOrderDetail" resultType="com.telecom.scm.order.mapper.MerchantOrderDetailRow">
+        SELECT
+            CAST(o.id AS CHAR) AS id,
+            o.order_no AS orderNo,
+            COALESCE(NULLIF(customer.company_name, ''), ma.member_name) AS customerName,
+            merchant.shop_name AS merchantName,
+            o.order_status AS orderStatus,
+            o.pay_status AS payStatus,
+            o.shipment_status AS shipmentStatus,
+            o.aftersale_status AS aftersaleStatus,
+            o.goods_amount AS goodsAmount,
+            o.freight_amount AS freightAmount,
+            o.discount_amount AS discountAmount,
+            o.pay_amount AS payAmount,
+            o.cost_amount AS costAmount,
+            o.profit_amount AS profitAmount,
+            o.receiver_name AS receiverName,
+            o.receiver_phone AS receiverPhone,
+            CONCAT(o.receiver_province, o.receiver_city, o.receiver_district, o.receiver_address) AS receiverAddress,
+            o.customer_remark AS customerRemark,
+            DATE_FORMAT(o.created_time, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM order_info o
+        LEFT JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        LEFT JOIN member_account ma ON ma.id = customer.member_id AND ma.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = o.merchant_id
+            AND merchant.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND o.merchant_id = #{merchantId}
+        LIMIT 1
+    </select>
+
+    <!-- 订单文件时间轴 -->
+    <select id="selectOrderFileTimelineRows" resultType="com.telecom.scm.order.mapper.OrderFileTimelineRow">
+        SELECT
+            CAST(file_rows.id AS CHAR) AS id,
+            file_rows.bizType AS bizType,
+            CAST(file_rows.bizId AS CHAR) AS bizId,
+            file_rows.originalName AS originalName,
+            file_rows.operatorName AS operatorName,
+            DATE_FORMAT(file_rows.uploadTime, '%Y-%m-%d %H:%i:%s') AS uploadTime
+        FROM (
+            SELECT
+                f.id,
+                f.biz_type AS bizType,
+                f.biz_id AS bizId,
+                f.original_name AS originalName,
+                COALESCE(u.nick_name, u.username, '') AS operatorName,
+                f.upload_time AS uploadTime
+            FROM file_storage f
+            LEFT JOIN sys_user u ON u.id = f.uploader_id
+            WHERE f.biz_type IN ('ORDER_CONTRACT', 'ORDER_PAYMENT', 'ORDER_SHIPMENT')
+                AND f.biz_id = #{orderId}
+
+            UNION ALL
+
+            SELECT
+                f.id,
+                f.biz_type AS bizType,
+                f.biz_id AS bizId,
+                f.original_name AS originalName,
+                COALESCE(u.nick_name, u.username, '') AS operatorName,
+                f.upload_time AS uploadTime
+            FROM file_storage f
+            JOIN aftersale_info a ON a.id = f.biz_id
+                AND a.deleted = 0
+            LEFT JOIN sys_user u ON u.id = f.uploader_id
+            WHERE f.biz_type IN ('AFTERSALE_APPLY', 'AFTERSALE_RETURN', 'AFTERSALE_REFUND')
+                AND a.order_id = #{orderId}
+        ) file_rows
+        ORDER BY file_rows.uploadTime DESC, file_rows.id DESC
+    </select>
+
+    <!-- 客户订单列表 -->
+    <select id="selectCustomerOrderRows" resultType="com.telecom.scm.order.mapper.OrderRow">
+        SELECT
+            CAST(o.id AS CHAR) AS id,
+            o.order_no AS order_no,
+            customer.company_name AS customer_name,
+            merchant.shop_name AS merchant_name,
+            o.pay_amount AS amount,
+            o.order_status AS status,
+            o.pay_status AS pay_status,
+            COALESCE(s.tracking_no, '-') AS logistics_no,
+            DATE_FORMAT(o.created_time, '%Y-%m-%d %H:%i') AS created_at,
+            o.aftersale_status AS aftersale_status,
+            o.order_source AS order_source
+        FROM order_info o
+        LEFT JOIN customer_info customer ON customer.id = o.customer_id AND customer.deleted = 0
+        LEFT JOIN member_account ma ON ma.id = customer.member_id AND ma.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = o.merchant_id AND merchant.deleted = 0
+        LEFT JOIN shipment_info s ON s.order_id = o.id
+        WHERE o.deleted = 0
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        ORDER BY o.created_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 客户订单数量 -->
+    <select id="countCustomerOrders" resultType="long">
+        SELECT COUNT(1)
+        FROM order_info o
+        LEFT JOIN customer_info customer ON customer.id = o.customer_id AND customer.deleted = 0
+        WHERE o.deleted = 0
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <!-- 商家订单列表 -->
+    <select id="selectMerchantOrderRows" resultType="com.telecom.scm.order.mapper.OrderRow">
+        SELECT
+            CAST(o.id AS CHAR) AS id,
+            o.order_no AS order_no,
+            COALESCE(NULLIF(customer.company_name, ''), ma.member_name) AS customer_name,
+            merchant.shop_name AS merchant_name,
+            o.pay_amount AS amount,
+            o.order_status AS status,
+            o.pay_status AS pay_status,
+            COALESCE(s.tracking_no, '-') AS logistics_no,
+            DATE_FORMAT(o.created_time, '%Y-%m-%d %H:%i') AS created_at,
+            COALESCE(a.aftersale_status, '-') AS aftersale_status,
+            o.order_source AS order_source
+        FROM order_info o
+        LEFT JOIN customer_info customer ON customer.id = o.customer_id AND customer.deleted = 0
+        LEFT JOIN member_account ma ON ma.id = customer.member_id AND ma.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = o.merchant_id AND merchant.deleted = 0
+        LEFT JOIN shipment_info s ON s.order_id = o.id
+        LEFT JOIN (
+            SELECT order_id, aftersale_status
+            FROM aftersale_info
+            WHERE deleted = 0
+            ORDER BY created_time DESC
+            LIMIT 1
+        ) a ON a.order_id = o.id
+        WHERE o.deleted = 0
+            AND merchant.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        ORDER BY o.created_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- 商家订单数量 -->
+    <select id="countMerchantOrders" resultType="long">
+        SELECT COUNT(1)
+        FROM order_info o
+        LEFT JOIN merchant_info merchant ON merchant.id = o.merchant_id AND merchant.deleted = 0
+        WHERE o.deleted = 0
+            AND merchant.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <!-- 客户订单访问权限校验 -->
+    <select id="selectCustomerOrderAccess" resultType="java.lang.String">
+        SELECT o.order_no
+        FROM order_info o
+        JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        LIMIT 1
+    </select>
+
+    <!-- 商家订单访问权限校验 -->
+    <select id="selectMerchantOrderAccess" resultType="java.lang.String">
+        SELECT o.order_no
+        FROM order_info o
+        JOIN merchant_info merchant ON merchant.id = o.merchant_id
+            AND merchant.deleted = 0
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND merchant.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        LIMIT 1
+    </select>
+
+    <!-- 商家订单详情商品项 -->
+    <select id="selectMerchantOrderDetailItems" resultType="com.telecom.scm.order.mapper.MerchantOrderDetailItemRow">
+        SELECT
+            CAST(o.id AS CHAR) AS id,
+            CAST(o.merchant_goods_id AS CHAR) AS merchantGoodsId,
+            CAST(o.sku_id AS CHAR) AS skuId,
+            o.spu_name AS spuName,
+            o.sku_name AS skuName,
+            o.spec_text AS specText,
+            o.quantity AS quantity,
+            o.base_price AS basePrice,
+            o.member_price AS memberPrice,
+            o.customer_price AS customerPrice,
+            o.final_unit_price AS finalUnitPrice,
+            o.final_amount AS finalAmount,
+            o.cost_price AS costPrice,
+            o.profit_amount AS profitAmount,
+            CAST(mg.main_image_id AS CHAR) AS mainImageId
+        FROM order_item o
+        LEFT JOIN merchant_goods mg ON mg.id = o.merchant_goods_id AND mg.deleted = 0
+        WHERE o.order_id = #{orderId}
+        ORDER BY o.id DESC
+    </select>
+
+    <!-- 订单支付时间轴 -->
+    <select id="selectOrderPaymentTimelineRows" resultType="com.telecom.scm.order.mapper.OrderPaymentTimelineRow">
+        SELECT
+            CAST(id AS CHAR) AS id,
+            record_type AS recordType,
+            pay_method AS payMethod,
+            pay_amount AS payAmount,
+            CAST(voucher_file_id AS CHAR) AS voucherFileId,
+            transaction_no AS transactionNo,
+            pay_status AS payStatus,
+            CAST(aftersale_id AS CHAR) AS aftersaleId,
+            remark AS remark,
+            DATE_FORMAT(created_time, '%Y-%m-%d %H:%i:%s') AS createdAt,
+            DATE_FORMAT(confirmed_time, '%Y-%m-%d %H:%i:%s') AS confirmedAt
+        FROM payment_record
+        WHERE order_id = #{orderId}
+        ORDER BY created_time DESC, id DESC
+    </select>
+
+    <!-- 订单物流时间轴 -->
+    <select id="selectOrderShipmentTimelineRow" resultType="com.telecom.scm.order.mapper.OrderShipmentTimelineRow">
+        SELECT
+            CAST(s.id AS CHAR) AS id,
+            s.carrier_name AS carrierName,
+            s.tracking_no AS trackingNo,
+            s.logistics_remark AS logisticsRemark,
+            COALESCE(shipper.nick_name, shipper.username, '') AS shipOperatorName,
+            COALESCE(receiver.nick_name, receiver.username, '') AS signOperatorName,
+            DATE_FORMAT(s.ship_time, '%Y-%m-%d %H:%i:%s') AS shipTime,
+            DATE_FORMAT(s.sign_time, '%Y-%m-%d %H:%i:%s') AS signTime
+        FROM shipment_info s
+        LEFT JOIN sys_user shipper ON shipper.id = s.created_by
+        LEFT JOIN sys_user receiver ON receiver.id = s.updated_by
+        WHERE s.order_id = #{orderId}
+        LIMIT 1
+    </select>
+
+    <!-- 订单售后时间轴 -->
+    <select id="selectOrderAftersaleTimelineRows" resultType="com.telecom.scm.order.mapper.OrderAftersaleTimelineRow">
+        SELECT
+            CAST(id AS CHAR) AS id,
+            aftersale_no AS aftersaleNo,
+            aftersale_type AS aftersaleType,
+            aftersale_status AS aftersaleStatus,
+            apply_amount AS applyAmount,
+            approved_amount AS approvedAmount,
+            return_tracking_no AS returnTrackingNo,
+            DATE_FORMAT(created_time, '%Y-%m-%d %H:%i:%s') AS createdAt,
+            DATE_FORMAT(merchant_receive_time, '%Y-%m-%d %H:%i:%s') AS merchantReceiveTime,
+            DATE_FORMAT(finish_time, '%Y-%m-%d %H:%i:%s') AS finishTime
+        FROM aftersale_info
+        WHERE deleted = 0
+            AND order_id = #{orderId}
+        ORDER BY created_time DESC, id DESC
+    </select>
+
+    <!-- 订单售后审核时间轴 -->
+    <select id="selectOrderAftersaleAuditTimelineRows" resultType="com.telecom.scm.order.mapper.OrderAftersaleAuditTimelineRow">
+        SELECT
+            CAST(log.id AS CHAR) AS id,
+            CAST(log.aftersale_id AS CHAR) AS aftersaleId,
+            log.action_type AS actionType,
+            log.old_status AS oldStatus,
+            log.new_status AS newStatus,
+            log.operator_name AS operatorName,
+            log.remark AS remark,
+            DATE_FORMAT(log.created_time, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM aftersale_audit_log log
+        JOIN aftersale_info a ON a.id = log.aftersale_id
+            AND a.deleted = 0
+        WHERE a.order_id = #{orderId}
+        ORDER BY log.created_time DESC, log.id DESC
+    </select>
+
+    <!-- 订单商品项调整日志 -->
+    <select id="selectOrderItemAdjustLogs" resultType="com.telecom.scm.order.mapper.OrderItemAdjustLogRow">
+        SELECT
+            CAST(log.id AS CHAR) AS id,
+            CAST(log.order_item_id AS CHAR) AS orderItemId,
+            CONCAT(item.spu_name, ' / ', item.sku_name) AS itemName,
+            log.old_quantity AS oldQuantity,
+            log.new_quantity AS newQuantity,
+            log.old_final_unit_price AS oldFinalUnitPrice,
+            log.new_final_unit_price AS newFinalUnitPrice,
+            log.old_final_amount AS oldFinalAmount,
+            log.new_final_amount AS newFinalAmount,
+            log.operator_name AS operatorName,
+            log.remark AS remark,
+            DATE_FORMAT(log.created_time, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM order_item_adjust_log log
+        LEFT JOIN order_item item ON item.id = log.order_item_id
+        WHERE log.order_id = #{orderId}
+        ORDER BY log.id DESC
+    </select>
+
+</mapper>

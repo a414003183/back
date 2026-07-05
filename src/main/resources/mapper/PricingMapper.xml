@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.pricing.mapper.PricingMapper">
+
+    <select id="selectMerchantContextByUsername" resultType="com.telecom.scm.pricing.mapper.row.MerchantContextRow">
+        SELECT
+            u.id AS userId,
+            merchant.id AS merchantId
+        FROM sys_user u
+        JOIN member_account ma ON ma.id = u.member_id
+            AND ma.deleted = 0
+            AND ma.status = 'ENABLED'
+            AND ma.member_type = 'MERCHANT'
+        JOIN merchant_info merchant ON merchant.member_id = ma.id
+            AND merchant.deleted = 0
+            AND merchant.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="selectGoodsAuthRules" resultType="com.telecom.scm.pricing.mapper.row.GoodsAuthRuleRow">
+        SELECT
+            CAST(r.id AS CHAR) AS id,
+            r.auth_type AS authType,
+            r.target_id AS targetId,
+            CASE r.auth_type
+                WHEN 'BRAND' THEN brand.brand_name
+                WHEN 'CATEGORY' THEN category.category_name
+                ELSE sku.sku_name
+            END AS targetName,
+            r.status AS status,
+            DATE_FORMAT(r.start_time, '%Y-%m-%d %H:%i') AS startTime,
+            DATE_FORMAT(r.end_time, '%Y-%m-%d %H:%i') AS endTime,
+            r.remark AS remark
+        FROM goods_auth_rule r
+        JOIN merchant_info merchant ON merchant.id = r.merchant_id
+            AND merchant.deleted = 0
+        JOIN sys_user u ON u.member_id = merchant.member_id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        LEFT JOIN product_brand brand ON brand.id = r.target_id
+            AND r.auth_type = 'BRAND'
+            AND brand.deleted = 0
+        LEFT JOIN product_category category ON category.id = r.target_id
+            AND r.auth_type = 'CATEGORY'
+            AND category.deleted = 0
+        LEFT JOIN product_sku sku ON sku.id = r.target_id
+            AND r.auth_type = 'PRODUCT'
+            AND sku.deleted = 0
+        WHERE r.deleted = 0
+        ORDER BY r.updated_time DESC, r.id DESC
+    </select>
+
+    <insert id="upsertGoodsAuthRule">
+        INSERT INTO goods_auth_rule (
+            merchant_id,
+            auth_type,
+            target_id,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{merchantId},
+            #{authType},
+            #{targetId},
+            #{status},
+            #{remark},
+            #{operatorId},
+            #{operatorId},
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            status = VALUES(status),
+            remark = VALUES(remark),
+            updated_by = VALUES(updated_by),
+            updated_time = CURRENT_TIMESTAMP,
+            deleted = 0
+    </insert>
+
+    <select id="selectLevelDiscountRules" resultType="com.telecom.scm.pricing.mapper.row.LevelDiscountRuleRow">
+        SELECT
+            CAST(r.id AS CHAR) AS id,
+            r.member_level AS memberLevel,
+            r.target_type AS targetType,
+            r.target_id AS targetId,
+            CASE r.target_type
+                WHEN 'BRAND' THEN brand.brand_name
+                WHEN 'CATEGORY' THEN category.category_name
+                WHEN 'PRODUCT' THEN CONCAT(spu.spu_name, ' / ', sku.sku_name)
+                ELSE NULL
+            END AS targetName,
+            r.discount_rate AS discountRate,
+            r.status AS status,
+            DATE_FORMAT(r.start_time, '%Y-%m-%d %H:%i') AS startTime,
+            DATE_FORMAT(r.end_time, '%Y-%m-%d %H:%i') AS endTime,
+            r.remark AS remark
+        FROM level_discount_rule r
+        JOIN merchant_info merchant ON merchant.id = r.merchant_id
+            AND merchant.deleted = 0
+        JOIN sys_user u ON u.member_id = merchant.member_id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        LEFT JOIN product_brand brand ON brand.id = r.target_id
+            AND r.target_type = 'BRAND'
+            AND brand.deleted = 0
+        LEFT JOIN product_category category ON category.id = r.target_id
+            AND r.target_type = 'CATEGORY'
+            AND category.deleted = 0
+        LEFT JOIN product_sku sku ON sku.id = r.target_id
+            AND r.target_type = 'PRODUCT'
+            AND sku.deleted = 0
+        LEFT JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        WHERE r.deleted = 0
+        ORDER BY r.updated_time DESC, r.id DESC
+    </select>
+
+    <insert id="upsertLevelDiscountRule">
+        INSERT INTO level_discount_rule (
+            merchant_id,
+            member_level,
+            target_type,
+            target_id,
+            category_id,
+            discount_rate,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{merchantId},
+            #{memberLevel},
+            #{targetType},
+            #{targetId},
+            #{targetId},
+            #{discountRate},
+            #{status},
+            #{remark},
+            #{operatorId},
+            #{operatorId},
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            target_type = VALUES(target_type),
+            target_id = VALUES(target_id),
+            category_id = VALUES(category_id),
+            discount_rate = VALUES(discount_rate),
+            status = VALUES(status),
+            remark = VALUES(remark),
+            updated_by = VALUES(updated_by),
+            updated_time = CURRENT_TIMESTAMP,
+            deleted = 0
+    </insert>
+
+    <select id="selectCustomerPriceRules" resultType="com.telecom.scm.pricing.mapper.row.CustomerPriceRuleRow">
+        SELECT
+            CAST(r.id AS CHAR) AS id,
+            r.customer_id AS customerId,
+            customer.company_name AS customerName,
+            r.sku_id AS skuId,
+            sku.sku_name AS skuName,
+            spu.spu_name AS spuName,
+            mg.sale_price AS salePrice,
+            r.special_price AS specialPrice,
+            r.status AS status,
+            DATE_FORMAT(r.start_time, '%Y-%m-%d %H:%i') AS startTime,
+            DATE_FORMAT(r.end_time, '%Y-%m-%d %H:%i') AS endTime,
+            r.remark AS remark
+        FROM customer_price_rule r
+        JOIN merchant_info merchant ON merchant.id = r.merchant_id
+            AND merchant.deleted = 0
+        JOIN sys_user u ON u.member_id = merchant.member_id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        LEFT JOIN customer_info customer ON customer.id = r.customer_id
+            AND customer.deleted = 0
+        LEFT JOIN product_sku sku ON sku.id = r.sku_id
+            AND sku.deleted = 0
+        LEFT JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        LEFT JOIN merchant_goods mg ON mg.merchant_id = r.merchant_id
+            AND mg.sku_id = r.sku_id
+            AND mg.deleted = 0
+        WHERE r.deleted = 0
+        ORDER BY r.updated_time DESC, r.id DESC
+    </select>
+
+    <insert id="upsertCustomerPriceRule">
+        INSERT INTO customer_price_rule (
+            merchant_id,
+            customer_id,
+            sku_id,
+            special_price,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{merchantId},
+            #{customerId},
+            #{skuId},
+            #{specialPrice},
+            #{status},
+            #{remark},
+            #{operatorId},
+            #{operatorId},
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            special_price = VALUES(special_price),
+            status = VALUES(status),
+            remark = VALUES(remark),
+            updated_by = VALUES(updated_by),
+            updated_time = CURRENT_TIMESTAMP,
+            deleted = 0
+    </insert>
+
+    <select id="selectMerchantSkuOptions" resultType="com.telecom.scm.pricing.mapper.row.MerchantSkuOptionRow">
+        SELECT
+            CAST(sku.id AS CHAR) AS value,
+            CONCAT(spu.spu_name, ' / ', sku.sku_name) AS label
+        FROM merchant_goods mg
+        JOIN merchant_info merchant ON merchant.id = mg.merchant_id
+            AND merchant.deleted = 0
+        JOIN sys_user u ON u.member_id = merchant.member_id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        JOIN product_sku sku ON sku.id = mg.sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        WHERE mg.deleted = 0
+        ORDER BY mg.id DESC
+    </select>
+
+    <select id="selectBestLevelDiscountRate" resultType="java.math.BigDecimal">
+        <![CDATA[
+        SELECT discount_rate AS discountRate
+        FROM level_discount_rule
+        WHERE deleted = 0
+            AND status = 'ENABLED'
+            AND merchant_id = #{merchantId}
+            AND member_level = #{memberLevel}
+            AND (start_time IS NULL OR start_time <= NOW())
+            AND (end_time IS NULL OR end_time >= NOW())
+            AND (
+                (target_type = 'SKU' AND target_id = #{skuId})
+                OR (target_type = 'BRAND' AND target_id = #{brandId})
+                OR (target_type = 'CATEGORY' AND target_id = #{categoryId})
+            )
+        ORDER BY CASE target_type
+            WHEN 'SKU' THEN 1
+            WHEN 'BRAND' THEN 2
+            WHEN 'CATEGORY' THEN 3
+            ELSE 4
+        END
+        LIMIT 1
+        ]]>
+    </select>
+
+</mapper>

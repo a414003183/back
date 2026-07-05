@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.aftersale.mapper.AftersaleMapper">
+
+    <select id="selectCustomerContextByUsername" resultType="com.telecom.scm.order.mapper.OrderCreateContextRow">
+        SELECT
+            u.id AS user_id,
+            customer.id AS customer_id,
+            COALESCE(customer.company_name, ma.member_name, u.nick_name, u.username) AS customer_name
+        FROM sys_user u
+        JOIN member_account ma ON ma.id = u.member_id
+            AND ma.deleted = 0
+            AND ma.status = 'ENABLED'
+            AND ma.member_type = 'CUSTOMER'
+        JOIN customer_info customer ON customer.member_id = ma.id
+            AND customer.deleted = 0
+            AND customer.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="selectMerchantContextByUsername" resultType="com.telecom.scm.order.mapper.OrderOperatorContextRow">
+        SELECT
+            u.id AS user_id,
+            merchant.id AS merchant_id,
+            COALESCE(merchant.shop_name, ma.member_name, u.nick_name, u.username) AS operator_name
+        FROM sys_user u
+        JOIN member_account ma ON ma.id = u.member_id
+            AND ma.deleted = 0
+            AND ma.status = 'ENABLED'
+            AND ma.member_type = 'MERCHANT'
+        JOIN merchant_info merchant ON merchant.member_id = ma.id
+            AND merchant.deleted = 0
+            AND merchant.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="selectCustomerAftersaleRows" resultType="com.telecom.scm.aftersale.mapper.AftersaleRow">
+        SELECT
+            CAST(a.id AS CHAR) AS id,
+            a.aftersale_no AS aftersale_no,
+            o.order_no AS order_no,
+            customer.company_name AS customer_name,
+            merchant.shop_name AS merchant_name,
+            a.aftersale_type AS aftersale_type,
+            a.apply_amount AS apply_amount,
+            a.aftersale_status AS aftersale_status,
+            a.need_return AS need_return,
+            COALESCE(a.return_tracking_no, '-') AS return_tracking_no,
+            COALESCE(a.remark, '-') AS remark,
+            DATE_FORMAT(a.created_time, '%Y-%m-%d %H:%i') AS created_at
+        FROM aftersale_info a
+        JOIN order_info o ON o.id = a.order_id AND o.deleted = 0
+        LEFT JOIN customer_info customer ON customer.id = a.customer_id AND customer.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = a.merchant_id AND merchant.deleted = 0
+        WHERE a.deleted = 0
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        ORDER BY a.created_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countCustomerAftersales" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM aftersale_info a
+        JOIN order_info o ON o.id = a.order_id AND o.deleted = 0
+        LEFT JOIN customer_info customer ON customer.id = a.customer_id AND customer.deleted = 0
+        WHERE a.deleted = 0
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="selectMerchantAftersaleRows" resultType="com.telecom.scm.aftersale.mapper.AftersaleRow">
+        SELECT
+            CAST(a.id AS CHAR) AS id,
+            a.aftersale_no AS aftersale_no,
+            o.order_no AS order_no,
+            customer.company_name AS customer_name,
+            merchant.shop_name AS merchant_name,
+            a.aftersale_type AS aftersale_type,
+            a.apply_amount AS apply_amount,
+            a.aftersale_status AS aftersale_status,
+            a.need_return AS need_return,
+            COALESCE(a.return_tracking_no, '-') AS return_tracking_no,
+            COALESCE(a.remark, '-') AS remark,
+            DATE_FORMAT(a.created_time, '%Y-%m-%d %H:%i') AS created_at
+        FROM aftersale_info a
+        JOIN order_info o ON o.id = a.order_id AND o.deleted = 0
+        LEFT JOIN customer_info customer ON customer.id = a.customer_id AND customer.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = a.merchant_id AND merchant.deleted = 0
+        WHERE a.deleted = 0
+            AND merchant.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+        ORDER BY a.created_time DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countMerchantAftersales" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM aftersale_info a
+        JOIN order_info o ON o.id = a.order_id AND o.deleted = 0
+        LEFT JOIN merchant_info merchant ON merchant.id = a.merchant_id AND merchant.deleted = 0
+        WHERE a.deleted = 0
+            AND merchant.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <insert id="insertAftersaleInfo" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO aftersale_info (
+            aftersale_no,
+            order_id,
+            customer_id,
+            merchant_id,
+            aftersale_type,
+            reason_type,
+            reason_desc,
+            apply_amount,
+            approved_amount,
+            aftersale_status,
+            need_return,
+            return_tracking_no,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{aftersaleNo},
+            #{orderId},
+            #{customerId},
+            #{merchantId},
+            #{aftersaleType},
+            #{reasonType},
+            #{reasonDesc},
+            #{applyAmount},
+            #{approvedAmount},
+            #{aftersaleStatus},
+            #{needReturn},
+            #{returnTrackingNo},
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <insert id="insertAftersaleItems">
+        INSERT INTO aftersale_item (
+            aftersale_id,
+            order_item_id,
+            sku_id,
+            spu_name,
+            sku_name,
+            spec_text,
+            quantity,
+            apply_amount
+        ) VALUES
+        <foreach collection="items" item="item" separator=",">
+            (
+                #{item.aftersaleId},
+                #{item.orderItemId},
+                #{item.skuId},
+                #{item.spuName},
+                #{item.skuName},
+                #{item.specText},
+                #{item.quantity},
+                #{item.applyAmount}
+            )
+        </foreach>
+    </insert>
+
+    <insert id="insertAftersaleAuditLog">
+        INSERT INTO aftersale_audit_log (
+            aftersale_id,
+            action_type,
+            old_status,
+            new_status,
+            operator_id,
+            operator_name,
+            remark
+        ) VALUES (
+            #{aftersaleId},
+            #{actionType},
+            #{oldStatus},
+            #{newStatus},
+            #{operatorId},
+            #{operatorName},
+            #{remark}
+        )
+    </insert>
+
+    <select id="selectCustomerAftersaleForAction" resultType="com.telecom.scm.aftersale.mapper.AftersaleProcessRow">
+        SELECT
+            a.id,
+            a.aftersale_no,
+            a.order_id,
+            o.order_no,
+            a.customer_id,
+            a.merchant_id,
+            a.aftersale_type,
+            a.apply_amount,
+            a.approved_amount,
+            o.pay_amount AS order_pay_amount,
+            o.used_points AS order_used_points,
+            a.aftersale_status,
+            a.need_return,
+            a.return_tracking_no
+        FROM aftersale_info a
+        JOIN order_info o ON o.id = a.order_id AND o.deleted = 0
+        WHERE a.deleted = 0
+            AND a.id = #{aftersaleId}
+            AND a.customer_id = #{customerId}
+        LIMIT 1
+    </select>
+
+    <select id="selectMerchantAftersaleForAction" resultType="com.telecom.scm.aftersale.mapper.AftersaleProcessRow">
+        SELECT
+            a.id,
+            a.aftersale_no,
+            a.order_id,
+            o.order_no,
+            a.customer_id,
+            a.merchant_id,
+            a.aftersale_type,
+            a.apply_amount,
+            a.approved_amount,
+            o.pay_amount AS order_pay_amount,
+            o.used_points AS order_used_points,
+            a.aftersale_status,
+            a.need_return,
+            a.return_tracking_no
+        FROM aftersale_info a
+        JOIN order_info o ON o.id = a.order_id AND o.deleted = 0
+        WHERE a.deleted = 0
+            AND a.id = #{aftersaleId}
+            AND a.merchant_id = #{merchantId}
+        LIMIT 1
+    </select>
+
+    <insert id="insertRefundRecord">
+        INSERT INTO payment_record (
+            order_id,
+            aftersale_id,
+            record_type,
+            pay_method,
+            pay_amount,
+            voucher_file_id,
+            transaction_no,
+            pay_status,
+            confirmed_by,
+            confirmed_time,
+            remark
+        ) VALUES (
+            #{orderId},
+            #{aftersaleId},
+            'REFUND',
+            #{payMethod},
+            #{payAmount},
+            #{voucherFileId},
+            #{transactionNo},
+            'REFUNDED',
+            #{confirmedBy},
+            NOW(),
+            #{remark}
+        )
+    </insert>
+
+    <insert id="insertProductStockLog">
+        INSERT INTO product_stock_log (
+            sku_id,
+            change_type,
+            change_qty,
+            before_qty,
+            after_qty,
+            biz_type,
+            biz_id,
+            remark,
+            operated_by
+        ) VALUES (
+            #{skuId},
+            #{changeType},
+            #{changeQty},
+            #{beforeQty},
+            #{afterQty},
+            #{bizType},
+            #{bizId},
+            #{remark},
+            #{operatedBy}
+        )
+    </insert>
+
+</mapper>

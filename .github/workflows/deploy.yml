@@ -1,0 +1,63 @@
+name: Deploy Backend to Server
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  JAVA_VERSION: '21'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: 'maven'
+
+      - name: Build backend jar
+        run: mvn clean package -DskipTests
+
+      - name: Package backend artifacts
+        run: |
+          VERSION="backend-${{ github.run_id }}-${{ github.sha }}"
+          mkdir -p "deploy-pkg"
+          cp target/*.jar "deploy-pkg/"
+          cp deploy/deploy-backend.sh "deploy-pkg/"
+          cp -r deploy/systemd "deploy-pkg/"
+          cp -r deploy/nginx "deploy-pkg/"
+          tar -czf "${VERSION}.tar.gz" -C deploy-pkg .
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+
+      - name: Upload backend package to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "${{ env.VERSION }}.tar.gz"
+          target: '/opt/app/releases/'
+          strip_components: 0
+
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            VERSION="${{ env.VERSION }}"
+            TAR_FILE="/opt/app/releases/${VERSION}.tar.gz"
+            TMP_DIR="/tmp/${VERSION}"
+            mkdir -p "$TMP_DIR"
+            tar -xzf "$TAR_FILE" -C "$TMP_DIR"
+            bash "$TMP_DIR/deploy-backend.sh" "$TAR_FILE"
+            rm -rf "$TMP_DIR"

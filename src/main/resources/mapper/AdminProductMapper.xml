@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.admin.mapper.AdminProductMapper">
+
+    <select id="selectBrands" resultType="com.telecom.scm.admin.mapper.BrandRow">
+        SELECT b.id, b.brand_name AS brandName, b.brand_desc AS brandDesc, b.sort_no AS sortNo, b.status,
+               b.created_time AS createdTime, b.updated_time AS updatedTime,
+               COALESCE(pc.cnt, 0) AS productCount
+        FROM product_brand b
+        LEFT JOIN (SELECT brand_id, COUNT(1) AS cnt FROM product_spu WHERE deleted = 0 GROUP BY brand_id) pc ON pc.brand_id = b.id
+        WHERE b.deleted = 0
+        ORDER BY b.sort_no ASC, b.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countBrands" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM product_brand b
+        WHERE b.deleted = 0
+    </select>
+
+    <select id="selectBrandById" resultType="com.telecom.scm.admin.mapper.BrandRow">
+        SELECT id, brand_name AS brandName, brand_desc AS brandDesc, sort_no AS sortNo, status
+        FROM product_brand
+        WHERE deleted = 0 AND id = #{brandId}
+        LIMIT 1
+    </select>
+
+    <select id="selectNextBrandNumber" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(CAST(SUBSTR(brand_code, 3) AS UNSIGNED)), 0) + 1 AS nextNum
+        FROM product_brand
+        WHERE brand_code LIKE 'BR%' AND deleted = 0
+    </select>
+
+    <insert id="insertBrand">
+        INSERT INTO product_brand (brand_code, brand_name, brand_desc, sort_no, status, deleted)
+        VALUES (CONCAT('BR', LPAD(#{nextNum}, 6, '0')), #{brandName}, #{brandDesc}, #{sortNo}, #{status}, 0)
+    </insert>
+
+    <update id="updateBrand">
+        UPDATE product_brand
+        SET brand_name = #{brandName},
+            brand_desc = #{brandDesc},
+            sort_no = #{sortNo},
+            status = #{status},
+            updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{brandId} AND deleted = 0
+    </update>
+
+    <update id="deleteBrand">
+        UPDATE product_brand SET deleted = 1, updated_time = CURRENT_TIMESTAMP WHERE id = #{brandId}
+    </update>
+
+    <update id="updateBrandStatus">
+        UPDATE product_brand
+        SET status = #{status}, updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{brandId} AND deleted = 0
+    </update>
+
+    <select id="selectCategories" resultType="com.telecom.scm.admin.mapper.CategoryRow">
+        SELECT c.id, c.category_name AS categoryName, c.parent_id AS parentId, c.level_no AS levelNo,
+               c.sort_no AS sortNo, c.status,
+               c.created_time AS createdTime, c.updated_time AS updatedTime,
+               p.category_name AS parentName,
+               COALESCE(pc.cnt, 0) AS productCount
+        FROM product_category c
+        LEFT JOIN product_category p ON p.id = c.parent_id AND p.deleted = 0
+        LEFT JOIN (SELECT category_id, COUNT(1) AS cnt FROM product_spu WHERE deleted = 0 GROUP BY category_id) pc ON pc.category_id = c.id
+        WHERE c.deleted = 0
+        ORDER BY c.level_no ASC, c.sort_no ASC, c.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countCategories" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM product_category c
+        WHERE c.deleted = 0
+    </select>
+
+    <select id="selectCategoryById" resultType="com.telecom.scm.admin.mapper.CategoryRow">
+        SELECT id, category_name AS categoryName, parent_id AS parentId, level_no AS levelNo, sort_no AS sortNo, status
+        FROM product_category
+        WHERE deleted = 0 AND id = #{categoryId}
+        LIMIT 1
+    </select>
+
+    <select id="selectNextCategoryNumber" resultType="java.lang.Integer">
+        SELECT COALESCE(MAX(CAST(SUBSTR(category_code, 4) AS UNSIGNED)), 0) + 1 AS nextNum
+        FROM product_category
+        WHERE category_code LIKE 'CAT%' AND deleted = 0
+    </select>
+
+    <insert id="insertCategory">
+        INSERT INTO product_category (category_code, category_name, parent_id, level_no, sort_no, status, deleted)
+        VALUES (CONCAT('CAT', LPAD(#{nextNum}, 6, '0')), #{categoryName}, #{parentId}, #{levelNo}, #{sortNo}, #{status}, 0)
+    </insert>
+
+    <update id="updateCategory">
+        UPDATE product_category
+        SET category_name = #{categoryName},
+            parent_id = #{parentId},
+            level_no = #{levelNo},
+            sort_no = #{sortNo},
+            status = #{status},
+            updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{categoryId} AND deleted = 0
+    </update>
+
+    <update id="deleteCategory">
+        UPDATE product_category SET deleted = 1, updated_time = CURRENT_TIMESTAMP WHERE id = #{categoryId}
+    </update>
+
+    <update id="updateCategoryStatus">
+        UPDATE product_category
+        SET status = #{status}, updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{categoryId} AND deleted = 0
+    </update>
+
+</mapper>

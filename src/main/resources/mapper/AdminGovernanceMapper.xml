@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.admin.mapper.AdminGovernanceMapper">
+
+    <select id="selectRoleRows" resultType="com.telecom.scm.admin.mapper.RoleRow">
+        SELECT
+            CAST(role.id AS CHAR) AS id,
+            role.role_name AS roleName,
+            role.role_code AS roleCode,
+            role.data_scope AS dataScope,
+            COUNT(DISTINCT user_role.user_id) AS memberCount,
+            COUNT(DISTINCT role_menu.menu_id) AS menuCount,
+            role.status AS status
+        FROM sys_role role
+        LEFT JOIN sys_user_role user_role ON user_role.role_id = role.id
+        LEFT JOIN sys_role_menu role_menu ON role_menu.role_id = role.id
+        WHERE role.deleted = 0
+        GROUP BY role.id, role.role_name, role.role_code, role.data_scope, role.status
+        ORDER BY role.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectMenuRows" resultType="com.telecom.scm.admin.mapper.MenuRow">
+        SELECT
+            CAST(menu.id AS CHAR) AS id,
+            menu.menu_name AS menuName,
+            menu.menu_type AS menuType,
+            menu.path AS path,
+            menu.permission_code AS permissionCode,
+            COALESCE(parent.menu_name, 'ROOT') AS parentName,
+            menu.sort_no AS sortNo,
+            menu.status AS status
+        FROM sys_menu menu
+        LEFT JOIN sys_menu parent ON parent.id = menu.parent_id
+            AND parent.deleted = 0
+        WHERE menu.deleted = 0
+        ORDER BY menu.sort_no ASC, menu.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <insert id="insertRoleMenus">
+        INSERT INTO sys_role_menu (
+            role_id,
+            menu_id
+        ) VALUES
+        <foreach collection="menuIds" item="menuId" separator=",">
+            (
+                #{roleId},
+                #{menuId}
+            )
+        </foreach>
+    </insert>
+
+    <select id="selectLoginLogs" resultType="com.telecom.scm.admin.mapper.LoginLogRow">
+        SELECT
+            CAST(login_log.id AS CHAR) AS id,
+            login_log.username AS username,
+            COALESCE(role.role_code, '-') AS roleCode,
+            login_log.ip_address AS ipAddress,
+            login_log.login_status AS loginStatus,
+            login_log.login_message AS loginMessage,
+            DATE_FORMAT(login_log.login_time, '%Y-%m-%d %H:%i:%s') AS loginTime
+        FROM sys_login_log login_log
+        LEFT JOIN sys_user user_info ON user_info.id = login_log.user_id
+            AND user_info.deleted = 0
+        LEFT JOIN sys_user_role user_role ON user_role.user_id = user_info.id
+        LEFT JOIN sys_role role ON role.id = user_role.role_id
+            AND role.deleted = 0
+        ORDER BY login_log.login_time DESC, login_log.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countLoginLogs" resultType="java.lang.Long">
+        SELECT COUNT(*)
+        FROM sys_login_log login_log
+        LEFT JOIN sys_user user_info ON user_info.id = login_log.user_id AND user_info.deleted = 0
+        LEFT JOIN sys_user_role user_role ON user_role.user_id = user_info.id
+        LEFT JOIN sys_role role ON role.id = user_role.role_id AND role.deleted = 0
+    </select>
+
+    <select id="selectImportExportLogsByType" resultType="com.telecom.scm.admin.mapper.ImportExportLogRow">
+        SELECT
+            CAST(id AS CHAR) AS id,
+            username AS username,
+            module_name AS moduleName,
+            business_type AS businessType,
+            request_uri AS requestUri,
+            operation_status AS operationStatus,
+            response_message AS responseMessage,
+            DATE_FORMAT(operation_time, '%Y-%m-%d %H:%i:%s') AS operationTime
+        FROM sys_operation_log
+        WHERE business_type IN ('IMPORT_DATA', 'EXPORT_DATA')
+          AND (request_uri LIKE CONCAT('%type=', #{type}, '%') OR request_params LIKE CONCAT('%{"type":"', #{type}, '"}%'))
+        ORDER BY operation_time DESC, id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectExportProducts" resultType="com.telecom.scm.admin.mapper.ExportProductRow">
+        SELECT
+            CAST(sku.id AS CHAR) AS id,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            sku.spec_text AS specText,
+            sku.base_price AS basePrice,
+            sku.cost_price AS costPrice,
+            sku.stock_qty AS stockQty,
+            sku.sale_status AS saleStatus
+        FROM product_sku sku
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        WHERE sku.deleted = 0
+        ORDER BY sku.id DESC
+    </select>
+
+    <update id="updateImportedUser">
+        UPDATE sys_user
+        SET username = #{username},
+            phone = #{phone},
+            email = #{email},
+            status = #{status},
+            updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+            AND deleted = 0
+    </update>
+
+    <update id="updateImportedCustomer">
+        UPDATE customer_info
+        SET company_name = #{companyName},
+            member_level = #{memberLevel},
+            contact_name = #{contactName},
+            contact_phone = #{contactPhone},
+            invite_code = #{inviteCode},
+            status = #{status},
+            updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+            AND deleted = 0
+    </update>
+
+    <update id="updateImportedSupplier">
+        UPDATE supplier_info
+        SET supplier_name = #{supplierName},
+            contact_name = #{contactName},
+            contact_phone = #{contactPhone},
+            status = #{status},
+            updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+            AND deleted = 0
+    </update>
+
+    <update id="updateImportedProduct">
+        UPDATE product_sku sku
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        SET spu.spu_name = #{spuName},
+            sku.sku_name = #{skuName},
+            sku.spec_text = #{specText},
+            sku.base_price = #{basePrice},
+            sku.cost_price = #{costPrice},
+            sku.stock_qty = #{stockQty},
+            sku.sale_status = #{saleStatus},
+            sku.updated_time = CURRENT_TIMESTAMP,
+            spu.updated_time = CURRENT_TIMESTAMP
+        WHERE sku.id = #{id}
+            AND sku.deleted = 0
+    </update>
+
+    <insert id="insertUserMenus">
+        INSERT INTO sys_user_menu (
+            user_id,
+            menu_id
+        ) VALUES
+        <foreach collection="menuIds" item="menuId" separator=",">
+            (
+                #{userId},
+                #{menuId}
+            )
+        </foreach>
+    </insert>
+
+</mapper>

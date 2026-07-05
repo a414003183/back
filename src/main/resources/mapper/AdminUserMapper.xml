@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.admin.mapper.AdminUserMapper">
+
+    <select id="selectAdminUsers" resultType="com.telecom.scm.admin.mapper.AdminUserRow">
+        SELECT
+            CAST(u.id AS CHAR) AS id,
+            u.username AS username,
+            COALESCE(u.nick_name, u.username) AS display_name,
+            CAST(r.id AS CHAR) AS role_id,
+            COALESCE(r.role_code, '') AS role_code,
+            COALESCE(r.role_name, 'Unassigned') AS role,
+            u.status AS status,
+            COALESCE(u.phone, '-') AS phone,
+            COALESCE(u.email, '-') AS email,
+            DATE_FORMAT(u.created_time, '%Y-%m-%d %H:%i:%s') AS created_at
+        FROM sys_user u
+        LEFT JOIN sys_user_role ur ON ur.user_id = u.id
+        LEFT JOIN sys_role r ON r.id = ur.role_id AND r.deleted = 0
+        WHERE u.deleted = 0
+        ORDER BY u.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectAdminUserById" resultType="com.telecom.scm.admin.mapper.AdminUserRow">
+        SELECT
+            CAST(u.id AS CHAR) AS id,
+            u.username AS username,
+            COALESCE(u.nick_name, u.username) AS display_name,
+            CAST(r.id AS CHAR) AS role_id,
+            COALESCE(r.role_code, '') AS role_code,
+            COALESCE(r.role_name, 'Unassigned') AS role,
+            u.status AS status,
+            COALESCE(u.phone, '-') AS phone,
+            COALESCE(u.email, '-') AS email,
+            DATE_FORMAT(u.created_time, '%Y-%m-%d %H:%i:%s') AS created_at
+        FROM sys_user u
+        LEFT JOIN sys_user_role ur ON ur.user_id = u.id
+        LEFT JOIN sys_role r ON r.id = ur.role_id AND r.deleted = 0
+        WHERE u.deleted = 0
+            AND u.id = #{userId}
+        LIMIT 1
+    </select>
+
+    <select id="selectUserContextById" resultType="com.telecom.scm.admin.mapper.UserContextRow">
+        SELECT
+            u.id AS userId,
+            u.username AS username,
+            u.nick_name AS displayName,
+            u.phone AS phone,
+            u.email AS email,
+            u.status AS status,
+            u.user_type AS userType,
+            u.member_id AS memberId,
+            r.id AS roleId,
+            r.role_code AS roleCode,
+            r.role_name AS roleName
+        FROM sys_user u
+        LEFT JOIN sys_user_role ur ON ur.user_id = u.id
+        LEFT JOIN sys_role r ON r.id = ur.role_id
+            AND r.deleted = 0
+        WHERE u.deleted = 0
+            AND u.id = #{userId}
+        LIMIT 1
+    </select>
+
+    <insert id="insertUser" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_user (
+            username,
+            password,
+            nick_name,
+            user_type,
+            member_id,
+            phone,
+            email,
+            status,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{username},
+            #{password},
+            #{nickName},
+            #{userType},
+            #{memberId},
+            #{phone},
+            #{email},
+            #{status},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <insert id="insertMemberAccount" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO member_account (
+            member_code,
+            member_type,
+            member_name,
+            phone,
+            email,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberCode},
+            #{memberType},
+            #{memberName},
+            #{phone},
+            #{email},
+            'ENABLED',
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <insert id="insertCustomerInfo">
+        INSERT INTO customer_info (
+            member_id,
+            company_name,
+            member_level,
+            contact_name,
+            contact_phone,
+            invite_code,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberId},
+            COALESCE(#{companyName}, ''),
+            'NORMAL',
+            #{contactName},
+            #{contactPhone},
+            #{inviteCode},
+            'ENABLED',
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <insert id="insertMerchantInfo">
+        INSERT INTO merchant_info (
+            member_id,
+            shop_name,
+            license_no,
+            contact_name,
+            contact_phone,
+            shop_desc,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberId},
+            #{shopName},
+            NULL,
+            #{contactName},
+            #{contactPhone},
+            #{remark},
+            'ENABLED',
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <insert id="insertSupplierInfo">
+        INSERT INTO supplier_info (
+            member_id,
+            supplier_name,
+            qualification_file_id,
+            contact_name,
+            contact_phone,
+            supply_desc,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberId},
+            #{supplierName},
+            NULL,
+            #{contactName},
+            #{contactPhone},
+            #{remark},
+            'ENABLED',
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+</mapper>

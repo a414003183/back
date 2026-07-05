@@ -1,0 +1,469 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.member.mapper.MemberWorkspaceMapper">
+
+    <select id="selectCustomerProfile" resultType="com.telecom.scm.member.mapper.row.CustomerProfileRow">
+        SELECT
+            customer.company_name AS companyName,
+            customer.member_level AS memberLevel,
+            customer.accumulated_paid_amount AS accumulatedPaidAmount,
+            DATE_FORMAT(customer.last_level_upgrade_at, '%Y-%m-%d %H:%i:%s') AS lastLevelUpgradeAt,
+            customer.contact_name AS contactName,
+            customer.contact_phone AS contactPhone,
+            customer.invoice_title AS invoiceTitle,
+            customer.tax_no AS taxNo,
+            customer.bank_name AS bankName,
+            customer.bank_account AS bankAccount,
+            customer.invite_code AS inviteCode,
+            address.province AS receiverProvince,
+            address.city AS receiverCity,
+            address.district AS receiverDistrict,
+            address.detail_address AS receiverAddress,
+            COALESCE(
+                CONCAT(address.province, ' ', address.city, ' ', address.district, ' ', address.detail_address),
+                '-'
+            ) AS defaultAddress
+        FROM sys_user u
+        JOIN member_account member_account ON member_account.id = u.member_id
+            AND member_account.deleted = 0
+            AND member_account.status = 'ENABLED'
+            AND member_account.member_type = 'CUSTOMER'
+        JOIN customer_info customer ON customer.member_id = member_account.id
+            AND customer.deleted = 0
+            AND customer.status = 'ENABLED'
+        LEFT JOIN member_address address ON address.member_id = member_account.id
+            AND address.deleted = 0
+            AND address.status = 'ENABLED'
+            AND address.is_default = 1
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="selectMerchantProfile" resultType="com.telecom.scm.member.mapper.row.MerchantProfileRow">
+        SELECT
+            merchant.id AS merchantId,
+            merchant.shop_name AS shopName,
+            merchant.license_no AS licenseNo,
+            merchant.contact_name AS contactName,
+            merchant.contact_phone AS contactPhone,
+            merchant.shop_desc AS shopDesc,
+            merchant.status AS status
+        FROM sys_user u
+        JOIN member_account member_account ON member_account.id = u.member_id
+            AND member_account.deleted = 0
+            AND member_account.status = 'ENABLED'
+            AND member_account.member_type = 'MERCHANT'
+        JOIN merchant_info merchant ON merchant.member_id = member_account.id
+            AND merchant.deleted = 0
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="selectSupplierProfile" resultType="com.telecom.scm.member.mapper.row.SupplierProfileRow">
+        SELECT
+            supplier.id AS supplierId,
+            supplier.supplier_name AS supplierName,
+            supplier.contact_name AS contactName,
+            supplier.contact_phone AS contactPhone,
+            supplier.supply_desc AS supplyDesc,
+            supplier.qualification_file_id AS qualificationFileId,
+            COALESCE(file_storage.original_name, '-') AS qualificationFileName
+        FROM sys_user u
+        JOIN member_account member_account ON member_account.id = u.member_id
+            AND member_account.deleted = 0
+            AND member_account.status = 'ENABLED'
+            AND member_account.member_type = 'SUPPLIER'
+        JOIN supplier_info supplier ON supplier.member_id = member_account.id
+            AND supplier.deleted = 0
+            AND supplier.status = 'ENABLED'
+        LEFT JOIN file_storage ON file_storage.id = supplier.qualification_file_id
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <select id="selectSupplierStockRows" resultType="com.telecom.scm.member.mapper.row.SupplierStockRow">
+        SELECT
+            CAST(sku.id AS CHAR) AS id,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            sku.spec_text AS specText,
+            sku.stock_qty AS stockQty,
+            sku.safety_stock AS safetyStock,
+            CASE
+                WHEN sku.stock_qty <![CDATA[<=]]> sku.safety_stock THEN 'LOW_STOCK'
+                ELSE 'NORMAL'
+            END AS stockStatus,
+            COALESCE(
+                (
+                    SELECT DATE_FORMAT(MAX(stock_log.created_time), '%Y-%m-%d %H:%i')
+                    FROM product_stock_log stock_log
+                    WHERE stock_log.sku_id = sku.id
+                ),
+                '-'
+            ) AS lastChangeTime
+        FROM supplier_info supplier
+        JOIN member_account member_account ON member_account.id = supplier.member_id
+            AND member_account.deleted = 0
+        JOIN sys_user u ON u.member_id = member_account.id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        JOIN product_spu spu ON spu.supplier_id = supplier.id
+            AND spu.deleted = 0
+        JOIN product_sku sku ON sku.spu_id = spu.id
+            AND sku.deleted = 0
+        WHERE supplier.deleted = 0
+        ORDER BY sku.stock_qty ASC, sku.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countSupplierStockRows" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM supplier_info supplier
+        JOIN member_account member_account ON member_account.id = supplier.member_id
+            AND member_account.deleted = 0
+        JOIN sys_user u ON u.member_id = member_account.id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        JOIN product_spu spu ON spu.supplier_id = supplier.id
+            AND spu.deleted = 0
+        JOIN product_sku sku ON sku.spu_id = spu.id
+            AND sku.deleted = 0
+        WHERE supplier.deleted = 0
+    </select>
+
+    <select id="selectSupplierCooperationRows" resultType="com.telecom.scm.member.mapper.row.SupplierCooperationRow">
+        SELECT
+            CAST(mg.id AS CHAR) AS id,
+            merchant.shop_name AS merchantName,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            mg.sale_price AS salePrice,
+            mg.sale_status AS saleStatus,
+            DATE_FORMAT(mg.updated_time, '%Y-%m-%d %H:%i') AS updatedAt
+        FROM supplier_info supplier
+        JOIN member_account member_account ON member_account.id = supplier.member_id
+            AND member_account.deleted = 0
+        JOIN sys_user u ON u.member_id = member_account.id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        JOIN merchant_goods mg ON mg.supplier_id = supplier.id
+            AND mg.deleted = 0
+        JOIN merchant_info merchant ON merchant.id = mg.merchant_id
+            AND merchant.deleted = 0
+        JOIN product_sku sku ON sku.id = mg.sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        WHERE supplier.deleted = 0
+        ORDER BY mg.updated_time DESC, mg.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countSupplierCooperationRows" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM supplier_info supplier
+        JOIN member_account member_account ON member_account.id = supplier.member_id
+            AND member_account.deleted = 0
+        JOIN sys_user u ON u.member_id = member_account.id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        JOIN merchant_goods mg ON mg.supplier_id = supplier.id
+            AND mg.deleted = 0
+        JOIN merchant_info merchant ON merchant.id = mg.merchant_id
+            AND merchant.deleted = 0
+        JOIN product_sku sku ON sku.id = mg.sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        WHERE supplier.deleted = 0
+    </select>
+
+    <select id="selectMerchantShipmentRows" resultType="com.telecom.scm.member.mapper.row.MerchantShipmentRow">
+        SELECT
+            CAST(shipment.id AS CHAR) AS id,
+            order_info.order_no AS orderNo,
+            customer.company_name AS customerName,
+            shipment.carrier_name AS carrierName,
+            shipment.tracking_no AS trackingNo,
+            shipment.ship_status AS shipStatus,
+            DATE_FORMAT(shipment.ship_time, '%Y-%m-%d %H:%i') AS shipTime,
+            shipment.logistics_remark AS logisticsRemark
+        FROM shipment_info shipment
+        JOIN order_info order_info ON order_info.id = shipment.order_id
+            AND order_info.deleted = 0
+        JOIN merchant_info merchant ON merchant.id = order_info.merchant_id
+            AND merchant.deleted = 0
+        JOIN sys_user u ON u.member_id = merchant.member_id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        LEFT JOIN customer_info customer ON customer.id = order_info.customer_id
+            AND customer.deleted = 0
+        ORDER BY shipment.updated_time DESC, shipment.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countMerchantShipmentRows" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM shipment_info shipment
+        JOIN order_info order_info ON order_info.id = shipment.order_id
+            AND order_info.deleted = 0
+        JOIN merchant_info merchant ON merchant.id = order_info.merchant_id
+            AND merchant.deleted = 0
+        JOIN sys_user u ON u.member_id = merchant.member_id
+            AND u.deleted = 0
+            AND u.username = #{username}
+        LEFT JOIN customer_info customer ON customer.id = order_info.customer_id
+            AND customer.deleted = 0
+    </select>
+
+    <select id="selectMerchantReportSummary" resultType="com.telecom.scm.member.mapper.row.MerchantReportSummaryRow">
+        SELECT
+            COUNT(1) AS totalOrders,
+            COALESCE(SUM(order_info.pay_amount), 0) AS grossSales,
+            COALESCE(SUM(order_info.profit_amount), 0) AS grossProfit,
+            COALESCE(SUM(refund.refundAmount), 0) AS refundAmount,
+            COALESCE(SUM(refund.profitReduction), 0) AS profitReduction
+        FROM order_info order_info
+        LEFT JOIN (
+            SELECT
+                order_refund.orderId,
+                SUM(order_refund.refundAmount) AS refundAmount,
+                SUM(order_refund.profitReduction) AS profitReduction
+            FROM (
+                SELECT
+                    aftersale.id AS aftersaleId,
+                    aftersale.order_id AS orderId,
+                    aftersale.approved_amount AS refundAmount,
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN apply_total.totalApplyAmount IS NULL OR apply_total.totalApplyAmount = 0 THEN 0
+                                ELSE aftersale.approved_amount * aftersale_item.apply_amount / apply_total.totalApplyAmount
+                            END
+                            - CASE
+                                WHEN aftersale.need_return = 1 THEN order_item.cost_price * aftersale_item.quantity
+                                ELSE 0
+                            END
+                        ),
+                        aftersale.approved_amount
+                    ) AS profitReduction
+                FROM aftersale_info aftersale
+                LEFT JOIN (
+                    SELECT
+                        aftersale_id,
+                        SUM(apply_amount) AS totalApplyAmount
+                    FROM aftersale_item
+                    GROUP BY aftersale_id
+                ) apply_total ON apply_total.aftersale_id = aftersale.id
+                LEFT JOIN aftersale_item aftersale_item ON aftersale_item.aftersale_id = aftersale.id
+                LEFT JOIN order_item order_item ON order_item.id = aftersale_item.order_item_id
+                WHERE aftersale.deleted = 0
+                    AND aftersale.aftersale_status = 'FINISHED'
+                GROUP BY aftersale.id, aftersale.order_id, aftersale.approved_amount
+            ) order_refund
+            GROUP BY order_refund.orderId
+        ) refund ON refund.orderId = order_info.id
+        WHERE order_info.deleted = 0
+            AND order_info.merchant_id = #{merchantId}
+            <if test="startTime != null">
+                AND order_info.created_time >= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND order_info.created_time <![CDATA[<]]> #{endTime}
+            </if>
+    </select>
+
+    <select id="selectMerchantCustomerRanking" resultType="com.telecom.scm.member.mapper.row.MerchantCustomerRankingRow">
+        SELECT
+            CAST(order_info.customer_id AS CHAR) AS id,
+            customer.company_name AS customerName,
+            COUNT(1) AS orderCount,
+            COALESCE(SUM(order_info.pay_amount), 0) AS grossAmount,
+            COALESCE(SUM(refund.refundAmount), 0) AS refundAmount,
+            COALESCE(SUM(order_info.pay_amount), 0) - COALESCE(SUM(refund.refundAmount), 0) AS netAmount,
+            COALESCE(SUM(order_info.profit_amount), 0) AS grossProfit,
+            COALESCE(SUM(order_info.profit_amount), 0) - COALESCE(SUM(refund.profitReduction), 0) AS netProfit
+        FROM order_info order_info
+        LEFT JOIN customer_info customer ON customer.id = order_info.customer_id
+            AND customer.deleted = 0
+        LEFT JOIN (
+            SELECT
+                order_refund.orderId,
+                SUM(order_refund.refundAmount) AS refundAmount,
+                SUM(order_refund.profitReduction) AS profitReduction
+            FROM (
+                SELECT
+                    aftersale.id AS aftersaleId,
+                    aftersale.order_id AS orderId,
+                    aftersale.approved_amount AS refundAmount,
+                    COALESCE(
+                        SUM(
+                            CASE
+                                WHEN apply_total.totalApplyAmount IS NULL OR apply_total.totalApplyAmount = 0 THEN 0
+                                ELSE aftersale.approved_amount * aftersale_item.apply_amount / apply_total.totalApplyAmount
+                            END
+                            - CASE
+                                WHEN aftersale.need_return = 1 THEN order_item.cost_price * aftersale_item.quantity
+                                ELSE 0
+                            END
+                        ),
+                        aftersale.approved_amount
+                    ) AS profitReduction
+                FROM aftersale_info aftersale
+                LEFT JOIN (
+                    SELECT
+                        aftersale_id,
+                        SUM(apply_amount) AS totalApplyAmount
+                    FROM aftersale_item
+                    GROUP BY aftersale_id
+                ) apply_total ON apply_total.aftersale_id = aftersale.id
+                LEFT JOIN aftersale_item aftersale_item ON aftersale_item.aftersale_id = aftersale.id
+                LEFT JOIN order_item order_item ON order_item.id = aftersale_item.order_item_id
+                WHERE aftersale.deleted = 0
+                    AND aftersale.aftersale_status = 'FINISHED'
+                GROUP BY aftersale.id, aftersale.order_id, aftersale.approved_amount
+            ) order_refund
+            GROUP BY order_refund.orderId
+        ) refund ON refund.orderId = order_info.id
+        WHERE order_info.deleted = 0
+            AND order_info.merchant_id = #{merchantId}
+            <if test="startTime != null">
+                AND order_info.created_time >= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND order_info.created_time <![CDATA[<]]> #{endTime}
+            </if>
+        GROUP BY order_info.customer_id, customer.company_name
+        ORDER BY netAmount DESC, orderCount DESC
+        LIMIT 10
+    </select>
+
+    <select id="selectMerchantProductRanking" resultType="com.telecom.scm.member.mapper.row.MerchantProductRankingRow">
+        SELECT
+            CAST(order_item.sku_id AS CHAR) AS id,
+            CONCAT(order_item.spu_name, ' / ', order_item.sku_name) AS productName,
+            SUM(order_item.quantity) AS saleQty,
+            COALESCE(SUM(order_item.final_amount), 0) AS grossAmount,
+            COALESCE(SUM(refund.refundAmount), 0) AS refundAmount,
+            COALESCE(SUM(order_item.final_amount), 0) - COALESCE(SUM(refund.refundAmount), 0) AS netAmount,
+            COALESCE(SUM(order_item.profit_amount), 0) AS grossProfit,
+            COALESCE(SUM(order_item.profit_amount), 0) - COALESCE(SUM(refund.profitReduction), 0) AS netProfit,
+            COALESCE(SUM(refund.returnQty), 0) AS returnQty
+        FROM order_item order_item
+        JOIN order_info order_info ON order_info.id = order_item.order_id
+            AND order_info.deleted = 0
+        LEFT JOIN (
+            SELECT
+                item_refund.orderItemId,
+                SUM(item_refund.refundAmount) AS refundAmount,
+                SUM(item_refund.profitReduction) AS profitReduction,
+                SUM(item_refund.returnQty) AS returnQty
+            FROM (
+                SELECT
+                    aftersale_item.order_item_id AS orderItemId,
+                    CASE
+                        WHEN apply_total.totalApplyAmount IS NULL OR apply_total.totalApplyAmount = 0 THEN 0
+                        ELSE aftersale.approved_amount * aftersale_item.apply_amount / apply_total.totalApplyAmount
+                    END AS refundAmount,
+                    (
+                        CASE
+                            WHEN apply_total.totalApplyAmount IS NULL OR apply_total.totalApplyAmount = 0 THEN 0
+                            ELSE aftersale.approved_amount * aftersale_item.apply_amount / apply_total.totalApplyAmount
+                        END
+                        - CASE
+                            WHEN aftersale.need_return = 1 THEN order_item.cost_price * aftersale_item.quantity
+                            ELSE 0
+                        END
+                    ) AS profitReduction,
+                    CASE
+                        WHEN aftersale.need_return = 1 THEN aftersale_item.quantity
+                        ELSE 0
+                    END AS returnQty
+                FROM aftersale_info aftersale
+                JOIN aftersale_item aftersale_item ON aftersale_item.aftersale_id = aftersale.id
+                JOIN order_item order_item ON order_item.id = aftersale_item.order_item_id
+                LEFT JOIN (
+                    SELECT
+                        aftersale_id,
+                        SUM(apply_amount) AS totalApplyAmount
+                    FROM aftersale_item
+                    GROUP BY aftersale_id
+                ) apply_total ON apply_total.aftersale_id = aftersale.id
+                WHERE aftersale.deleted = 0
+                    AND aftersale.aftersale_status = 'FINISHED'
+            ) item_refund
+            GROUP BY item_refund.orderItemId
+        ) refund ON refund.orderItemId = order_item.id
+        WHERE order_info.merchant_id = #{merchantId}
+            <if test="startTime != null">
+                AND order_info.created_time >= #{startTime}
+            </if>
+            <if test="endTime != null">
+                AND order_info.created_time <![CDATA[<]]> #{endTime}
+            </if>
+        GROUP BY order_item.sku_id, order_item.spu_name, order_item.sku_name
+        ORDER BY netAmount DESC, saleQty DESC
+        LIMIT 10
+    </select>
+
+    <insert id="insertDefaultReceiveAddress">
+        INSERT INTO member_address (
+            member_id,
+            address_type,
+            receiver_name,
+            receiver_phone,
+            province,
+            city,
+            district,
+            detail_address,
+            is_default,
+            status,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberId},
+            'RECEIVE',
+            #{contactName},
+            #{contactPhone},
+            #{receiverProvince},
+            #{receiverCity},
+            #{receiverDistrict},
+            #{receiverAddress},
+            1,
+            'ENABLED',
+            #{updatedBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <select id="selectMerchantContextByUsername" resultType="com.telecom.scm.member.mapper.row.MerchantContextRow">
+        SELECT
+            u.id AS userId,
+            merchant.id AS merchantId
+        FROM sys_user u
+        JOIN user_identity_binding binding ON binding.user_id = u.id
+            AND binding.deleted = 0
+            AND binding.identity_type = 'MERCHANT'
+            AND binding.status = 'ENABLED'
+        JOIN member_account member_account ON member_account.id = binding.identity_ref_id
+            AND member_account.deleted = 0
+            AND member_account.status = 'ENABLED'
+            AND member_account.member_type = 'MERCHANT'
+        JOIN merchant_info merchant ON merchant.member_id = member_account.id
+            AND merchant.deleted = 0
+            AND merchant.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.member.mapper.SupplyCollaborationMapper">
+
+    <select id="selectSupplierRelationRows" resultType="com.telecom.scm.member.mapper.row.SupplierRelationRow">
+        SELECT
+            CAST(relation_row.id AS CHAR) AS id,
+            relation_row.merchant_id AS merchantId,
+            merchant.shop_name AS merchantName,
+            merchant.contact_name AS contactName,
+            merchant.contact_phone AS contactPhone,
+            ma.member_code AS merchantCode,
+            relation_row.status AS status,
+            DATE_FORMAT(relation_row.cooperation_start_at, '%Y-%m-%d %H:%i') AS cooperationStartAt,
+            DATE_FORMAT(relation_row.cooperation_end_at, '%Y-%m-%d %H:%i') AS cooperationEndAt,
+            relation_row.remark AS remark,
+            DATE_FORMAT(relation_row.updated_time, '%Y-%m-%d %H:%i') AS updatedAt,
+            (
+                SELECT COUNT(1)
+                FROM supplier_goods_authorization auth_row
+                WHERE auth_row.deleted = 0
+                    AND auth_row.supplier_id = relation_row.supplier_id
+                    AND auth_row.merchant_id = relation_row.merchant_id
+                    AND auth_row.auth_status = 'ACTIVE'
+            ) AS authorizedSkuCount,
+            (
+                SELECT COUNT(1)
+                FROM merchant_goods mg
+                WHERE mg.deleted = 0
+                    AND mg.supplier_id = relation_row.supplier_id
+                    AND mg.merchant_id = relation_row.merchant_id
+            ) AS importedSkuCount
+        FROM merchant_supplier_relation relation_row
+        JOIN merchant_info merchant ON merchant.id = relation_row.merchant_id
+            AND merchant.deleted = 0
+        JOIN member_account ma ON ma.id = merchant.member_id
+            AND ma.deleted = 0
+        WHERE relation_row.deleted = 0
+            AND relation_row.supplier_id = #{supplierId}
+            <if test="status != null and status != ''">
+                AND relation_row.status = #{status}
+            </if>
+        ORDER BY relation_row.updated_time DESC, relation_row.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countSupplierRelationRows" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM merchant_supplier_relation relation_row
+        JOIN merchant_info merchant ON merchant.id = relation_row.merchant_id
+            AND merchant.deleted = 0
+        JOIN member_account ma ON ma.id = merchant.member_id
+            AND ma.deleted = 0
+        WHERE relation_row.deleted = 0
+            AND relation_row.supplier_id = #{supplierId}
+            <if test="status != null and status != ''">
+                AND relation_row.status = #{status}
+            </if>
+    </select>
+
+    <select id="selectSupplierAuthorizationRows" resultType="com.telecom.scm.member.mapper.row.SupplierAuthorizationRow">
+        SELECT
+            CAST(auth_row.id AS CHAR) AS id,
+            auth_row.merchant_id AS merchantId,
+            merchant.shop_name AS merchantName,
+            auth_row.supplier_sku_id AS supplierSkuId,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            sku.spec_text AS specText,
+            auth_row.authorized_price AS authorizedPrice,
+            auth_row.allocated_stock_qty AS allocatedStockQty,
+            auth_row.auth_status AS authStatus,
+            relation_row.status AS relationStatus,
+            DATE_FORMAT(auth_row.authorized_at, '%Y-%m-%d %H:%i') AS authorizedAt,
+            DATE_FORMAT(auth_row.revoked_at, '%Y-%m-%d %H:%i') AS revokedAt,
+            auth_row.remark AS remark,
+            DATE_FORMAT(auth_row.updated_time, '%Y-%m-%d %H:%i') AS updatedAt,
+            CAST(mg.id AS CHAR) AS merchantGoodsId,
+            mg.sale_status AS importedSaleStatus
+        FROM supplier_goods_authorization auth_row
+        JOIN merchant_info merchant ON merchant.id = auth_row.merchant_id
+            AND merchant.deleted = 0
+        JOIN product_sku sku ON sku.id = auth_row.supplier_sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+            AND spu.supplier_id = auth_row.supplier_id
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = auth_row.merchant_id
+            AND relation_row.supplier_id = auth_row.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN merchant_goods mg ON mg.merchant_id = auth_row.merchant_id
+            AND mg.supplier_id = auth_row.supplier_id
+            AND mg.sku_id = auth_row.supplier_sku_id
+            AND mg.deleted = 0
+        WHERE auth_row.deleted = 0
+            AND auth_row.supplier_id = #{supplierId}
+        ORDER BY auth_row.updated_time DESC, auth_row.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countSupplierAuthorizationRows" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM supplier_goods_authorization auth_row
+        JOIN merchant_info merchant ON merchant.id = auth_row.merchant_id
+            AND merchant.deleted = 0
+        JOIN product_sku sku ON sku.id = auth_row.supplier_sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+            AND spu.supplier_id = auth_row.supplier_id
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = auth_row.merchant_id
+            AND relation_row.supplier_id = auth_row.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN merchant_goods mg ON mg.merchant_id = auth_row.merchant_id
+            AND mg.supplier_id = auth_row.supplier_id
+            AND mg.sku_id = auth_row.supplier_sku_id
+            AND mg.deleted = 0
+        WHERE auth_row.deleted = 0
+            AND auth_row.supplier_id = #{supplierId}
+    </select>
+
+    <select id="selectMerchantSupplyRelationRows" resultType="com.telecom.scm.member.mapper.row.MerchantSupplyRelationRow">
+        SELECT
+            CAST(relation_row.id AS CHAR) AS id,
+            relation_row.supplier_id AS supplierId,
+            supplier.supplier_name AS supplierName,
+            ma.member_code AS supplierCode,
+            relation_row.status AS status,
+            DATE_FORMAT(relation_row.cooperation_start_at, '%Y-%m-%d %H:%i') AS cooperationStartAt,
+            DATE_FORMAT(relation_row.cooperation_end_at, '%Y-%m-%d %H:%i') AS cooperationEndAt,
+            relation_row.remark AS remark,
+            DATE_FORMAT(relation_row.updated_time, '%Y-%m-%d %H:%i') AS updatedAt,
+            (
+                SELECT COUNT(1)
+                FROM supplier_goods_authorization auth_row
+                WHERE auth_row.deleted = 0
+                    AND auth_row.merchant_id = relation_row.merchant_id
+                    AND auth_row.supplier_id = relation_row.supplier_id
+                    AND auth_row.auth_status = 'ACTIVE'
+            ) AS authorizedSkuCount,
+            (
+                SELECT COUNT(1)
+                FROM merchant_goods mg
+                WHERE mg.deleted = 0
+                    AND mg.merchant_id = relation_row.merchant_id
+                    AND mg.supplier_id = relation_row.supplier_id
+            ) AS importedSkuCount
+        FROM merchant_supplier_relation relation_row
+        JOIN supplier_info supplier ON supplier.id = relation_row.supplier_id
+            AND supplier.deleted = 0
+        JOIN member_account ma ON ma.id = supplier.member_id
+            AND ma.deleted = 0
+        WHERE relation_row.deleted = 0
+            AND relation_row.merchant_id = #{merchantId}
+        ORDER BY relation_row.updated_time DESC, relation_row.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="selectMerchantSupplyCatalogRows" resultType="java.util.HashMap">
+        SELECT
+            CAST(auth_row.id AS CHAR) AS id,
+            auth_row.supplier_id AS supplierId,
+            supplier.supplier_name AS supplierName,
+            supplier_account.member_code AS supplierCode,
+            auth_row.supplier_sku_id AS supplierSkuId,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            sku.spec_text AS specText,
+            sku.base_price AS basePrice,
+            sku.stock_qty AS stockQty,
+            auth_row.allocated_stock_qty AS allocatedStockQty,
+            auth_row.authorized_price AS authorizedPrice,
+            auth_row.auth_status AS authStatus,
+            relation_row.status AS relationStatus,
+            DATE_FORMAT(auth_row.authorized_at, '%Y-%m-%d %H:%i') AS authorizedAt,
+            DATE_FORMAT(auth_row.revoked_at, '%Y-%m-%d %H:%i') AS revokedAt,
+            auth_row.remark AS remark,
+            DATE_FORMAT(auth_row.updated_time, '%Y-%m-%d %H:%i') AS updatedAt,
+            CAST(mg.id AS CHAR) AS merchantGoodsId,
+            mg.sale_status AS importedSaleStatus
+        FROM supplier_goods_authorization auth_row
+        JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = auth_row.merchant_id
+            AND relation_row.supplier_id = auth_row.supplier_id
+            AND relation_row.deleted = 0
+        JOIN supplier_info supplier ON supplier.id = auth_row.supplier_id
+            AND supplier.deleted = 0
+        JOIN member_account supplier_account ON supplier_account.id = supplier.member_id
+            AND supplier_account.deleted = 0
+        JOIN product_sku sku ON sku.id = auth_row.supplier_sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+            AND spu.supplier_id = auth_row.supplier_id
+        LEFT JOIN merchant_goods mg ON mg.merchant_id = auth_row.merchant_id
+            AND mg.supplier_id = auth_row.supplier_id
+            AND mg.sku_id = auth_row.supplier_sku_id
+            AND mg.deleted = 0
+        WHERE auth_row.deleted = 0
+            AND auth_row.merchant_id = #{merchantId}
+        ORDER BY auth_row.updated_time DESC, auth_row.id DESC
+    </select>
+
+    <select id="selectMerchantSupplyCatalogWithRelationRows" resultType="com.telecom.scm.member.mapper.row.MerchantSupplyCatalogRow">
+        SELECT
+            relation_row.supplier_id AS supplierId,
+            supplier.supplier_name AS supplierName,
+            supplier_account.member_code AS supplierCode,
+            sku.id AS supplierSkuId,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            sku.spec_text AS specText,
+            spu.main_image_id AS mainImageId,
+            IFNULL(sku.stock_qty, 0) AS stockQty,
+            sku.base_price AS basePrice,
+            relation_row.status AS relationStatus,
+            auth_row.auth_status AS authStatus,
+            auth_row.authorized_price AS authorizedPrice,
+            auth_row.allocated_stock_qty AS allocatedStockQty,
+            CAST(mg.id AS CHAR) AS merchantGoodsId,
+            mg.sale_status AS importedSaleStatus,
+            DATE_FORMAT(COALESCE(auth_row.updated_time, relation_row.updated_time), '%Y-%m-%d %H:%i') AS updatedAt,
+            auth_row.remark AS remark
+        FROM merchant_supplier_relation relation_row
+        JOIN supplier_info supplier ON supplier.id = relation_row.supplier_id
+            AND supplier.deleted = 0
+        JOIN member_account supplier_account ON supplier_account.id = supplier.member_id
+            AND supplier_account.deleted = 0
+        JOIN product_sku sku ON sku.spu_id IN (
+            SELECT spu2.id FROM product_spu spu2 WHERE spu2.supplier_id = relation_row.supplier_id AND spu2.deleted = 0
+        )
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.supplier_id = relation_row.supplier_id
+            AND auth_row.merchant_id = relation_row.merchant_id
+            AND auth_row.supplier_sku_id = sku.id
+            AND auth_row.deleted = 0
+        LEFT JOIN merchant_goods mg ON mg.merchant_id = relation_row.merchant_id
+            AND mg.supplier_id = relation_row.supplier_id
+            AND mg.sku_id = sku.id
+            AND mg.deleted = 0
+        WHERE relation_row.deleted = 0
+            AND relation_row.merchant_id = #{merchantId}
+            AND relation_row.status = 'ACTIVE'
+        ORDER BY relation_row.updated_time DESC, sku.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countMerchantSupplyCatalogWithRelationRows" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM merchant_supplier_relation relation_row
+        JOIN supplier_info supplier ON supplier.id = relation_row.supplier_id
+            AND supplier.deleted = 0
+        JOIN member_account supplier_account ON supplier_account.id = supplier.member_id
+            AND supplier_account.deleted = 0
+        JOIN product_sku sku ON sku.spu_id IN (
+            SELECT spu2.id FROM product_spu spu2 WHERE spu2.supplier_id = relation_row.supplier_id AND spu2.deleted = 0
+        )
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.supplier_id = relation_row.supplier_id
+            AND auth_row.merchant_id = relation_row.merchant_id
+            AND auth_row.supplier_sku_id = sku.id
+            AND auth_row.deleted = 0
+        LEFT JOIN merchant_goods mg ON mg.merchant_id = relation_row.merchant_id
+            AND mg.supplier_id = relation_row.supplier_id
+            AND mg.sku_id = sku.id
+            AND mg.deleted = 0
+        WHERE relation_row.deleted = 0
+            AND relation_row.merchant_id = #{merchantId}
+            AND relation_row.status = 'ACTIVE'
+    </select>
+
+    <select id="selectMerchantImportAuthorization" resultType="com.telecom.scm.member.mapper.row.MerchantImportAuthorizationRow">
+        SELECT
+            auth_row.supplier_id AS supplierId,
+            auth_row.merchant_id AS merchantId,
+            auth_row.supplier_sku_id AS supplierSkuId,
+            auth_row.authorized_price AS authorizedPrice,
+            auth_row.allocated_stock_qty AS allocatedStockQty,
+            relation_row.status AS relationStatus,
+            auth_row.auth_status AS authStatus,
+            sku.base_price AS basePrice
+        FROM supplier_goods_authorization auth_row
+        JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = auth_row.merchant_id
+            AND relation_row.supplier_id = auth_row.supplier_id
+            AND relation_row.deleted = 0
+        JOIN product_sku sku ON sku.id = auth_row.supplier_sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+            AND spu.supplier_id = auth_row.supplier_id
+        WHERE auth_row.deleted = 0
+            AND auth_row.merchant_id = #{merchantId}
+            AND auth_row.supplier_sku_id = #{supplierSkuId}
+        LIMIT 1
+    </select>
+
+    <select id="selectPlatformSuppliers" resultType="com.telecom.scm.member.mapper.row.PlatformSupplierRow">
+        SELECT
+            supplier.id AS id,
+            supplier.supplier_name AS supplierName,
+            ma.member_code AS supplierCode,
+            supplier.contact_name AS contactName,
+            supplier.contact_phone AS contactPhone,
+            supplier.supply_desc AS supplyDesc
+        FROM supplier_info supplier
+        JOIN member_account ma ON ma.id = supplier.member_id
+            AND ma.deleted = 0
+            AND ma.status = 'ENABLED'
+        WHERE supplier.deleted = 0
+            AND supplier.status = 'ENABLED'
+            AND (#{keyword} IS NULL OR #{keyword} = ''
+                OR supplier.supplier_name LIKE CONCAT('%', #{keyword}, '%')
+                OR ma.member_code LIKE CONCAT('%', #{keyword}, '%'))
+        ORDER BY supplier.supplier_name ASC, supplier.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>

@@ -1,0 +1,36 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+*.log.*
+
+# Local runtime data
+uploads/
+*.tmp
+*.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment / local config
+.env
+application-local.yml
+application-local.properties
+
+# Node (if frontend mixed)
+node_modules/
+dist/

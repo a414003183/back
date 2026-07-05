@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.security.mapper.IdentityManagementMapper">
+
+    <!-- 根据用户名查询用户账号信息 -->
+    <select id="selectUserAccountByUsername" resultType="java.util.HashMap">
+        SELECT
+            u.id AS userId,
+            u.username AS username,
+            u.password AS passwordHash,
+            u.nick_name AS displayName,
+            u.user_type AS userType,
+            u.phone AS phone,
+            u.email AS email,
+            u.status AS status,
+            u.register_status AS registerStatus,
+            u.last_active_identity_type AS lastActiveIdentityType
+        FROM sys_user u
+        WHERE u.deleted = 0
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <!-- 根据绑定 ID 查询身份绑定信息 -->
+    <select id="selectIdentityBindingById" resultType="java.util.HashMap">
+        SELECT
+            binding.id AS bindingId,
+            binding.user_id AS userId,
+            binding.identity_type AS identityType,
+            binding.identity_ref_id AS memberId,
+            binding.status AS status,
+            binding.is_default AS defaultIdentity,
+            u.username AS username,
+            COALESCE(member_account.member_name, u.nick_name, u.username) AS displayName
+        FROM user_identity_binding binding
+        JOIN sys_user u ON u.id = binding.user_id
+            AND u.deleted = 0
+        LEFT JOIN member_account member_account ON member_account.id = binding.identity_ref_id
+            AND member_account.deleted = 0
+        WHERE binding.deleted = 0
+            AND binding.id = #{bindingId}
+        LIMIT 1
+    </select>
+
+    <!-- 插入系统用户 -->
+    <insert id="insertUser" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO sys_user (
+            username,
+            password,
+            nick_name,
+            user_type,
+            member_id,
+            phone,
+            email,
+            status,
+            register_source,
+            register_status,
+            last_active_identity_type,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{username},
+            #{password},
+            #{nickName},
+            #{userType},
+            #{memberId},
+            #{phone},
+            #{email},
+            #{status},
+            #{registerSource},
+            #{registerStatus},
+            #{lastActiveIdentityType},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <!-- 插入会员账号 -->
+    <insert id="insertMemberAccount" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO member_account (
+            member_code,
+            member_type,
+            member_name,
+            phone,
+            email,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberCode},
+            #{memberType},
+            #{memberName},
+            #{phone},
+            #{email},
+            #{status},
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <!-- 插入客户信息 -->
+    <insert id="insertCustomerInfo">
+        INSERT INTO customer_info (
+            member_id,
+            company_name,
+            member_level,
+            points_balance,
+            accumulated_points,
+            used_points,
+            contact_name,
+            contact_phone,
+            invoice_title,
+            tax_no,
+            bank_name,
+            bank_account,
+            invite_code,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberId},
+            COALESCE(#{companyName}, ''),
+            COALESCE(#{memberLevel}, 'NORMAL'),
+            COALESCE(#{pointsBalance}, 0),
+            COALESCE(#{accumulatedPoints}, 0),
+            COALESCE(#{usedPoints}, 0),
+            #{contactName},
+            #{contactPhone},
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            #{inviteCode},
+            #{status},
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <!-- 插入商户信息 -->
+    <insert id="insertMerchantInfo">
+        INSERT INTO merchant_info (
+            member_id,
+            shop_name,
+            license_no,
+            contact_name,
+            contact_phone,
+            shop_desc,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberId},
+            #{shopName},
+            NULL,
+            #{contactName},
+            #{contactPhone},
+            #{remark},
+            #{status},
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <!-- 插入供应商信息 -->
+    <insert id="insertSupplierInfo">
+        INSERT INTO supplier_info (
+            member_id,
+            supplier_name,
+            qualification_file_id,
+            contact_name,
+            contact_phone,
+            supply_desc,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{memberId},
+            #{supplierName},
+            NULL,
+            #{contactName},
+            #{contactPhone},
+            #{remark},
+            #{status},
+            #{remark},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <!-- 插入用户身份绑定 -->
+    <insert id="insertUserIdentityBinding" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_identity_binding (
+            user_id,
+            identity_type,
+            identity_ref_id,
+            status,
+            is_default,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{userId},
+            #{identityType},
+            #{memberId},
+            #{status},
+            #{defaultIdentity},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <!-- 查询待审核注册列表 -->
+    <select id="selectPendingRegistrationRows" resultType="java.util.HashMap">
+        SELECT
+            CAST(binding.id AS CHAR) AS id,
+            binding.identity_type AS identityType,
+            COALESCE(member_account.member_name, u.nick_name, u.username) AS displayName,
+            u.username AS username,
+            COALESCE(u.phone, '-') AS phone,
+            COALESCE(u.email, '-') AS email,
+            binding.status AS status,
+            DATE_FORMAT(binding.created_time, '%Y-%m-%d %H:%i:%s') AS createdAt
+        FROM user_identity_binding binding
+        JOIN sys_user u ON u.id = binding.user_id
+            AND u.deleted = 0
+        LEFT JOIN member_account member_account ON member_account.id = binding.identity_ref_id
+            AND member_account.deleted = 0
+        WHERE binding.deleted = 0
+            AND binding.status = 'PENDING'
+        ORDER BY binding.created_time DESC, binding.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+</mapper>

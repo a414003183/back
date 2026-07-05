@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.member.mapper.MerchantGoodsMapper">
+
+    <select id="selectMerchantContextByUsername" resultType="com.telecom.scm.member.mapper.row.MerchantContextRow">
+        SELECT
+            u.id AS userId,
+            merchant.id AS merchantId
+        FROM sys_user u
+        JOIN user_identity_binding binding ON binding.user_id = u.id
+            AND binding.deleted = 0
+            AND binding.identity_type = 'MERCHANT'
+            AND binding.status = 'ENABLED'
+        JOIN member_account member_account ON member_account.id = binding.identity_ref_id
+            AND member_account.deleted = 0
+            AND member_account.status = 'ENABLED'
+            AND member_account.member_type = 'MERCHANT'
+        JOIN merchant_info merchant ON merchant.member_id = member_account.id
+            AND merchant.deleted = 0
+            AND merchant.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        ORDER BY binding.is_default DESC, binding.id DESC
+        LIMIT 1
+    </select>
+
+    <insert id="insertDirectSpu" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO product_spu (
+            supplier_id, spu_code, spu_name, brand_id, category_id, description, keywords, detail_content,
+            main_image_id, sale_status, created_by, updated_by, deleted
+        ) VALUES (
+            #{supplierId}, #{spuCode}, #{spuName}, #{brandId}, #{categoryId}, #{description}, #{keywords}, #{detailContent},
+            #{mainImageId}, 'ON', #{operatorId}, #{operatorId}, 0
+        )
+    </insert>
+
+    <insert id="insertDirectSku" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO product_sku (
+            spu_id, sku_code, sku_name, spec_text, stock_qty, sale_status, created_by, updated_by, deleted
+        ) VALUES (
+            #{spuId}, #{skuCode}, #{skuName}, #{specText}, #{stockQty}, 'ON', #{operatorId}, #{operatorId}, 0
+        )
+    </insert>
+
+    <insert id="insertMerchantDirectGoods" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO merchant_goods (
+            merchant_id, supplier_id, sku_id, spu_id, source_type, sale_price, freight_amount, rebate_rate, sale_status, delivery_mode,
+            stock_qty, safety_stock, main_image_id, image_ids, keywords, detail_content, created_by, updated_by, deleted
+        ) VALUES (
+            #{merchantId}, #{supplierId}, #{skuId}, #{spuId}, 'DIRECT', #{salePrice}, #{freightAmount}, 0, #{saleStatus}, #{deliveryMode},
+            #{stockQty}, #{safetyStock}, #{mainImageId}, #{imageIds}, #{keywords}, #{detailContent}, #{operatorId}, #{operatorId}, 0
+        )
+    </insert>
+
+    <select id="selectMerchantGoodsRows" resultType="com.telecom.scm.member.mapper.row.MerchantGoodsRow">
+        SELECT
+            CAST(mg.id AS CHAR) AS id,
+            mg.id AS merchantGoodsId,
+            mg.sku_id AS skuId,
+            mg.supplier_id AS supplierId,
+            supplier.supplier_name AS supplierName,
+            CASE
+                WHEN mg.supplier_id IS NULL THEN 'DIRECT'
+                ELSE 'SUPPLIER_AUTH'
+            END AS sourceType,
+            CASE
+                WHEN mg.supplier_id IS NULL THEN 'ACTIVE'
+                ELSE COALESCE(relation_row.status, 'ENDED')
+            END AS cooperationStatus,
+            CASE
+                WHEN mg.supplier_id IS NULL THEN 'ACTIVE'
+                ELSE COALESCE(auth_row.auth_status, 'REVOKED')
+            END AS authorizationStatus,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            brand.brand_name AS brandName,
+            category.category_name AS categoryName,
+            sku.spec_text AS specText,
+            mg.sale_price AS salePrice,
+            mg.current_cost_price AS costPrice,
+            mg.rebate_rate AS rebateRate,
+            mg.sale_status AS saleStatus,
+            COALESCE(mg.sale_count, 0) AS saleCount,
+            mg.stock_qty AS stockQty,
+            COALESCE(sku.stock_qty, 0) AS supplierStockQty,
+            mg.safety_stock AS safetyStock,
+            mg.freight_amount AS freightAmount,
+            COALESCE(mg.main_image_id, spu.main_image_id) AS mainImageId,
+            COALESCE(mg.keywords, spu.keywords) AS keywords,
+            COALESCE(mg.detail_content, spu.detail_content) AS detailContent,
+            COALESCE(mg.description, spu.description) AS description,
+            mg.delivery_mode AS deliveryMode,
+            DATE_FORMAT(mg.updated_time, '%Y-%m-%d %H:%i') AS updatedAt
+        FROM merchant_goods mg
+        JOIN product_sku sku ON sku.id = mg.sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        LEFT JOIN product_brand brand ON brand.id = spu.brand_id
+            AND brand.deleted = 0
+        LEFT JOIN product_category category ON category.id = spu.category_id
+            AND category.deleted = 0
+        LEFT JOIN supplier_info supplier ON supplier.id = mg.supplier_id
+            AND supplier.deleted = 0
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = mg.merchant_id
+            AND relation_row.supplier_id = mg.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.merchant_id = mg.merchant_id
+            AND auth_row.supplier_id = mg.supplier_id
+            AND auth_row.supplier_sku_id = mg.sku_id
+            AND auth_row.deleted = 0
+        WHERE mg.deleted = 0
+            AND mg.merchant_id = #{merchantId}
+        ORDER BY mg.updated_time DESC, mg.id DESC
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="countMerchantGoodsRows" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM merchant_goods mg
+        JOIN product_sku sku ON sku.id = mg.sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        LEFT JOIN product_brand brand ON brand.id = spu.brand_id
+            AND brand.deleted = 0
+        LEFT JOIN product_category category ON category.id = spu.category_id
+            AND category.deleted = 0
+        LEFT JOIN supplier_info supplier ON supplier.id = mg.supplier_id
+            AND supplier.deleted = 0
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = mg.merchant_id
+            AND relation_row.supplier_id = mg.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.merchant_id = mg.merchant_id
+            AND auth_row.supplier_id = mg.supplier_id
+            AND auth_row.supplier_sku_id = mg.sku_id
+            AND auth_row.deleted = 0
+        WHERE mg.deleted = 0
+            AND mg.merchant_id = #{merchantId}
+    </select>
+
+    <select id="selectMerchantGoodOwnership" resultType="com.telecom.scm.member.mapper.row.MerchantGoodOwnershipRow">
+        SELECT
+            mg.id AS merchantGoodsId,
+            mg.supplier_id AS supplierId,
+            mg.source_type AS sourceType,
+            relation_row.status AS cooperationStatus,
+            auth_row.auth_status AS authorizationStatus
+        FROM merchant_goods mg
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = mg.merchant_id
+            AND relation_row.supplier_id = mg.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.merchant_id = mg.merchant_id
+            AND auth_row.supplier_id = mg.supplier_id
+            AND auth_row.supplier_sku_id = mg.sku_id
+            AND auth_row.deleted = 0
+        WHERE mg.deleted = 0
+            AND mg.merchant_id = #{merchantId}
+            AND mg.id = #{merchantGoodsId}
+        LIMIT 1
+    </select>
+
+    <update id="updateMerchantDirectGoodFull">
+        UPDATE merchant_goods
+        SET sale_price = #{salePrice},
+            rebate_rate = #{rebateRate},
+            sale_status = #{saleStatus},
+            delivery_mode = #{deliveryMode},
+            stock_qty = #{stockQty},
+            safety_stock = #{safetyStock},
+            main_image_id = #{mainImageId},
+            keywords = #{keywords},
+            detail_content = #{detailContent},
+            description = #{description},
+            updated_by = #{operatorId},
+            updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{merchantGoodsId}
+            AND merchant_id = #{merchantId}
+            AND deleted = 0
+    </update>
+
+    <select id="selectMerchantGoodById" resultType="com.telecom.scm.member.mapper.row.MerchantGoodsRow">
+        SELECT
+            CAST(mg.id AS CHAR) AS id,
+            mg.id AS merchantGoodsId,
+            mg.sku_id AS skuId,
+            mg.supplier_id AS supplierId,
+            supplier.supplier_name AS supplierName,
+            CASE
+                WHEN mg.supplier_id IS NULL THEN 'DIRECT'
+                ELSE 'SUPPLIER_AUTH'
+            END AS sourceType,
+            CASE
+                WHEN mg.supplier_id IS NULL THEN 'ACTIVE'
+                ELSE COALESCE(relation_row.status, 'ENDED')
+            END AS cooperationStatus,
+            CASE
+                WHEN mg.supplier_id IS NULL THEN 'ACTIVE'
+                ELSE COALESCE(auth_row.auth_status, 'REVOKED')
+            END AS authorizationStatus,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            brand.brand_name AS brandName,
+            category.category_name AS categoryName,
+            sku.spec_text AS specText,
+            mg.sale_price AS salePrice,
+            mg.current_cost_price AS costPrice,
+            mg.rebate_rate AS rebateRate,
+            mg.sale_status AS saleStatus,
+            mg.stock_qty AS stockQty,
+            COALESCE(sku.stock_qty, 0) AS supplierStockQty,
+            mg.safety_stock AS safetyStock,
+            mg.freight_amount AS freightAmount,
+            COALESCE(mg.main_image_id, spu.main_image_id) AS mainImageId,
+            COALESCE(mg.keywords, spu.keywords) AS keywords,
+            COALESCE(mg.detail_content, spu.detail_content) AS detailContent,
+            COALESCE(mg.description, spu.description) AS description,
+            mg.delivery_mode AS deliveryMode,
+            DATE_FORMAT(mg.updated_time, '%Y-%m-%d %H:%i') AS updatedAt
+        FROM merchant_goods mg
+        JOIN product_sku sku ON sku.id = mg.sku_id
+            AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id
+            AND spu.deleted = 0
+        LEFT JOIN product_brand brand ON brand.id = spu.brand_id
+            AND brand.deleted = 0
+        LEFT JOIN product_category category ON category.id = spu.category_id
+            AND category.deleted = 0
+        LEFT JOIN supplier_info supplier ON supplier.id = mg.supplier_id
+            AND supplier.deleted = 0
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = mg.merchant_id
+            AND relation_row.supplier_id = mg.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.merchant_id = mg.merchant_id
+            AND auth_row.supplier_id = mg.supplier_id
+            AND auth_row.supplier_sku_id = mg.sku_id
+            AND auth_row.deleted = 0
+        WHERE mg.deleted = 0
+            AND mg.merchant_id = #{merchantId}
+            AND mg.id = #{merchantGoodsId}
+        LIMIT 1
+    </select>
+
+</mapper>

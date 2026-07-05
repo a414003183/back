@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.security.mapper.PermissionBootstrapMapper">
+
+    <!-- 插入菜单 -->
+    <insert id="insertMenu">
+        INSERT INTO sys_menu (
+            id,
+            parent_id,
+            menu_name,
+            menu_type,
+            path,
+            component,
+            permission_code,
+            icon,
+            sort_no,
+            visible,
+            status,
+            created_by,
+            created_time,
+            updated_by,
+            updated_time,
+            deleted
+        ) VALUES (
+            #{id},
+            #{parentId},
+            #{menuName},
+            #{menuType},
+            #{path},
+            #{component},
+            #{permissionCode},
+            #{icon},
+            #{sortNo},
+            #{visible},
+            #{status},
+            #{operatorId},
+            CURRENT_TIMESTAMP,
+            #{operatorId},
+            CURRENT_TIMESTAMP,
+            0
+        )
+    </insert>
+
+    <!-- 更新菜单 -->
+    <update id="updateMenu">
+        UPDATE sys_menu
+        SET parent_id = #{parentId},
+            menu_name = #{menuName},
+            menu_type = #{menuType},
+            path = #{path},
+            component = #{component},
+            permission_code = #{permissionCode},
+            icon = #{icon},
+            sort_no = #{sortNo},
+            visible = #{visible},
+            status = #{status},
+            updated_by = #{operatorId},
+            updated_time = CURRENT_TIMESTAMP,
+            deleted = 0
+        WHERE id = #{id}
+    </update>
+
+    <!-- 根据角色编码和路径批量删除角色菜单关联 -->
+    <delete id="deleteRoleMenusByRoleCodeAndPaths">
+        DELETE role_menu
+        FROM sys_role_menu role_menu
+        JOIN sys_role role ON role.id = role_menu.role_id
+            AND role.deleted = 0
+        JOIN sys_menu menu ON menu.id = role_menu.menu_id
+            AND menu.deleted = 0
+        WHERE role.role_code = #{roleCode}
+            AND menu.path IN
+            <foreach collection="paths" item="path" open="(" separator="," close=")">
+                #{path}
+            </foreach>
+    </delete>
+
+</mapper>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.pricing.mapper.CustomerLevelMapper">
+
+    <insert id="upsertCustomerLevelConfig">
+        INSERT INTO customer_level_config (
+            level_code,
+            level_name,
+            upgrade_threshold_amount,
+            sort_no,
+            status,
+            remark,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{levelCode},
+            #{levelName},
+            #{upgradeThresholdAmount},
+            #{sortNo},
+            #{status},
+            #{remark},
+            #{operatorId},
+            #{operatorId},
+            0
+        )
+        ON DUPLICATE KEY UPDATE
+            level_name = VALUES(level_name),
+            upgrade_threshold_amount = VALUES(upgrade_threshold_amount),
+            sort_no = VALUES(sort_no),
+            status = VALUES(status),
+            remark = VALUES(remark),
+            updated_by = VALUES(updated_by),
+            updated_time = CURRENT_TIMESTAMP,
+            deleted = 0
+    </insert>
+
+    <update id="backfillAccumulatedPaidAmount">
+        UPDATE customer_info customer
+        SET customer.accumulated_paid_amount = COALESCE((
+            SELECT SUM(order_info.pay_amount)
+            FROM order_info order_info
+            WHERE order_info.deleted = 0
+                AND order_info.customer_id = customer.id
+                AND order_info.order_status = 'FINISHED'
+        ), 0.00)
+        WHERE customer.deleted = 0
+    </update>
+
+</mapper>

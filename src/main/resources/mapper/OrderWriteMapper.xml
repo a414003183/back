@@ -1,0 +1,480 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.order.mapper.OrderWriteMapper">
+
+    <!-- 下单时查询商品及价格信息 -->
+    <select id="selectGoodsForCreate" resultType="com.telecom.scm.order.mapper.OrderCreateGoodsRow">
+        SELECT
+            mg.id AS merchantGoodsId,
+            mg.merchant_id AS merchantId,
+            spu.brand_id AS brandId,
+            spu.category_id AS categoryId,
+            mg.sku_id AS skuId,
+            spu.spu_name AS spuName,
+            sku.sku_name AS skuName,
+            sku.spec_text AS specText,
+            mg.sale_price AS salePrice,
+            CASE
+                WHEN cpr.special_price IS NOT NULL THEN cpr.special_price
+                WHEN ldr_sku.discount_rate IS NOT NULL THEN ROUND(mg.sale_price * ldr_sku.discount_rate / 10, 2)
+                WHEN ldr_brand.discount_rate IS NOT NULL THEN ROUND(mg.sale_price * ldr_brand.discount_rate / 10, 2)
+                WHEN ldr_category.discount_rate IS NOT NULL THEN ROUND(mg.sale_price * ldr_category.discount_rate / 10, 2)
+                ELSE NULL
+            END AS memberPrice,
+            cpr.special_price AS customerPrice,
+            mg.current_cost_price AS costPrice,
+            CASE WHEN mg.supplier_id IS NOT NULL
+                THEN LEAST(COALESCE(mg.stock_qty, sku.stock_qty), sku.stock_qty)
+                ELSE COALESCE(mg.stock_qty, sku.stock_qty, 0)
+            END AS stockQty,
+            mg.main_image_id AS mainImageId,
+            mg.freight_amount AS freightAmount,
+            TRUE AS authorized
+        FROM merchant_goods mg
+        JOIN product_sku sku ON sku.id = mg.sku_id AND sku.deleted = 0
+        JOIN product_spu spu ON spu.id = sku.spu_id AND spu.deleted = 0
+        LEFT JOIN merchant_supplier_relation relation_row ON relation_row.merchant_id = mg.merchant_id
+            AND relation_row.supplier_id = mg.supplier_id
+            AND relation_row.deleted = 0
+        LEFT JOIN supplier_goods_authorization auth_row ON auth_row.merchant_id = mg.merchant_id
+            AND auth_row.supplier_id = mg.supplier_id
+            AND auth_row.supplier_sku_id = mg.sku_id
+            AND auth_row.deleted = 0
+        LEFT JOIN customer_price_rule cpr ON cpr.merchant_id = mg.merchant_id
+            AND cpr.customer_id = #{customerId}
+            AND cpr.sku_id = mg.sku_id
+            AND cpr.deleted = 0
+            AND cpr.status = 'ENABLED'
+            AND (cpr.start_time IS NULL OR cpr.start_time <![CDATA[ <= ]]> NOW())
+            AND (cpr.end_time IS NULL OR cpr.end_time <![CDATA[ >= ]]> NOW())
+        LEFT JOIN (
+            SELECT merchant_id, member_level, target_type, target_id, discount_rate
+            FROM level_discount_rule
+            WHERE deleted = 0
+                AND status = 'ENABLED'
+                AND member_level = #{memberLevel}
+                AND (start_time IS NULL OR start_time <![CDATA[ <= ]]> NOW())
+                AND (end_time IS NULL OR end_time <![CDATA[ >= ]]> NOW())
+        ) ldr_sku ON ldr_sku.merchant_id = mg.merchant_id
+            AND ldr_sku.target_type = 'SKU'
+            AND ldr_sku.target_id = mg.sku_id
+        LEFT JOIN (
+            SELECT merchant_id, member_level, target_type, target_id, discount_rate
+            FROM level_discount_rule
+            WHERE deleted = 0
+                AND status = 'ENABLED'
+                AND member_level = #{memberLevel}
+                AND (start_time IS NULL OR start_time <![CDATA[ <= ]]> NOW())
+                AND (end_time IS NULL OR end_time <![CDATA[ >= ]]> NOW())
+        ) ldr_brand ON ldr_brand.merchant_id = mg.merchant_id
+            AND ldr_brand.target_type = 'BRAND'
+            AND ldr_brand.target_id = spu.brand_id
+        LEFT JOIN (
+            SELECT merchant_id, member_level, target_type, target_id, discount_rate
+            FROM level_discount_rule
+            WHERE deleted = 0
+                AND status = 'ENABLED'
+                AND member_level = #{memberLevel}
+                AND (start_time IS NULL OR start_time <![CDATA[ <= ]]> NOW())
+                AND (end_time IS NULL OR end_time <![CDATA[ >= ]]> NOW())
+        ) ldr_category ON ldr_category.merchant_id = mg.merchant_id
+            AND ldr_category.target_type = 'CATEGORY'
+            AND ldr_category.target_id = spu.category_id
+        WHERE mg.deleted = 0
+            AND mg.sale_status = 'ON'
+            AND mg.id IN
+            <foreach collection="merchantGoodsIds" item="id" open="(" separator="," close=")">
+                #{id}
+            </foreach>
+    </select>
+
+    <!-- 插入订单主表 -->
+    <insert id="insertOrderInfo" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO order_info (
+            order_no,
+            customer_id,
+            merchant_id,
+            order_source,
+            order_status,
+            pay_status,
+            shipment_status,
+            aftersale_status,
+            goods_amount,
+            freight_amount,
+            discount_amount,
+            used_points,
+            points_deduction_amount,
+            pay_amount,
+            cost_amount,
+            profit_amount,
+            pay_method,
+            customer_remark,
+            receiver_name,
+            receiver_phone,
+            receiver_province,
+            receiver_city,
+            receiver_district,
+            receiver_address,
+            created_by,
+            updated_by,
+            deleted
+        ) VALUES (
+            #{orderNo},
+            #{customerId},
+            #{merchantId},
+            #{orderSource},
+            #{orderStatus},
+            #{payStatus},
+            #{shipmentStatus},
+            #{aftersaleStatus},
+            #{goodsAmount},
+            #{freightAmount},
+            #{discountAmount},
+            #{usedPoints},
+            #{pointsDeductionAmount},
+            #{payAmount},
+            #{costAmount},
+            #{profitAmount},
+            #{payMethod},
+            #{customerRemark},
+            #{receiverName},
+            #{receiverPhone},
+            #{receiverProvince},
+            #{receiverCity},
+            #{receiverDistrict},
+            #{receiverAddress},
+            #{createdBy},
+            #{updatedBy},
+            0
+        )
+    </insert>
+
+    <!-- 批量插入订单商品项 -->
+    <insert id="insertOrderItems">
+        INSERT INTO order_item (
+            order_id,
+            merchant_goods_id,
+            sku_id,
+            spu_name,
+            sku_name,
+            spec_text,
+            quantity,
+            base_price,
+            member_price,
+            customer_price,
+            final_unit_price,
+            final_amount,
+            cost_price,
+            profit_amount
+        ) VALUES
+        <foreach collection="items" item="item" separator=",">
+            (
+                #{item.orderId},
+                #{item.merchantGoodsId},
+                #{item.skuId},
+                #{item.spuName},
+                #{item.skuName},
+                #{item.specText},
+                #{item.quantity},
+                #{item.basePrice},
+                #{item.memberPrice},
+                #{item.customerPrice},
+                #{item.finalUnitPrice},
+                #{item.finalAmount},
+                #{item.costPrice},
+                #{item.profitAmount}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 插入订单状态变更日志 -->
+    <insert id="insertOrderStatusLog">
+        INSERT INTO order_status_log (
+            order_id,
+            old_status,
+            new_status,
+            operation_type,
+            operator_id,
+            operator_name,
+            remark
+        ) VALUES (
+            #{orderId},
+            #{oldStatus},
+            #{newStatus},
+            #{operationType},
+            #{operatorId},
+            #{operatorName},
+            #{remark}
+        )
+    </insert>
+
+    <!-- 根据用户名查询客户下单上下文 -->
+    <select id="selectCustomerContextByUsername" resultType="com.telecom.scm.order.mapper.OrderCreateContextRow">
+        SELECT
+            u.id AS user_id,
+            customer.id AS customer_id,
+            COALESCE(customer.company_name, ma.member_name, u.nick_name, u.username) AS customer_name,
+            customer.member_level AS member_level
+        FROM sys_user u
+        JOIN member_account ma ON ma.id = u.member_id
+            AND ma.deleted = 0
+            AND ma.status = 'ENABLED'
+            AND ma.member_type = 'CUSTOMER'
+        JOIN customer_info customer ON customer.member_id = ma.id
+            AND customer.deleted = 0
+            AND customer.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <!-- 根据用户名查询商家操作上下文 -->
+    <select id="selectMerchantContextByUsername" resultType="com.telecom.scm.order.mapper.OrderOperatorContextRow">
+        SELECT
+            u.id AS user_id,
+            merchant.id AS merchant_id,
+            COALESCE(merchant.shop_name, ma.member_name, u.nick_name, u.username) AS operator_name
+        FROM sys_user u
+        JOIN member_account ma ON ma.id = u.member_id
+            AND ma.deleted = 0
+            AND ma.status = 'ENABLED'
+            AND ma.member_type = 'MERCHANT'
+        JOIN merchant_info merchant ON merchant.member_id = ma.id
+            AND merchant.deleted = 0
+            AND merchant.status = 'ENABLED'
+        WHERE u.deleted = 0
+            AND u.status = 'ENABLED'
+            AND u.username = #{username}
+        LIMIT 1
+    </select>
+
+    <!-- 客户操作订单查询 -->
+    <select id="selectCustomerOrderForAction" resultType="com.telecom.scm.order.mapper.OrderProcessRow">
+        SELECT
+            o.id,
+            o.order_no,
+            o.customer_id,
+            o.merchant_id,
+            o.order_status,
+            o.pay_status,
+            o.shipment_status,
+            o.pay_amount,
+            COALESCE(s.tracking_no, '-') AS tracking_no
+        FROM order_info o
+        LEFT JOIN shipment_info s ON s.order_id = o.id
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND o.customer_id = #{customerId}
+        LIMIT 1
+    </select>
+
+    <!-- 商家操作订单查询 -->
+    <select id="selectMerchantOrderForAction" resultType="com.telecom.scm.order.mapper.OrderProcessRow">
+        SELECT
+            o.id,
+            o.order_no,
+            o.customer_id,
+            o.merchant_id,
+            o.order_status,
+            o.pay_status,
+            o.shipment_status,
+            o.pay_amount,
+            COALESCE(s.tracking_no, '-') AS tracking_no
+        FROM order_info o
+        LEFT JOIN shipment_info s ON s.order_id = o.id
+        WHERE o.deleted = 0
+            AND o.id = #{orderId}
+            AND o.merchant_id = #{merchantId}
+        LIMIT 1
+    </select>
+
+    <!-- 插入支付记录 -->
+    <insert id="insertPaymentRecord">
+        INSERT INTO payment_record (
+            order_id,
+            aftersale_id,
+            record_type,
+            pay_method,
+            pay_amount,
+            voucher_file_id,
+            transaction_no,
+            pay_status,
+            confirmed_by,
+            confirmed_time,
+            remark
+        ) VALUES (
+            #{orderId},
+            NULL,
+            #{recordType},
+            #{payMethod},
+            #{payAmount},
+            #{voucherFileId},
+            #{transactionNo},
+            #{payStatus},
+            #{confirmedBy},
+            #{confirmedTime},
+            #{remark}
+        )
+    </insert>
+
+    <!-- 更新订单最新支付记录 -->
+    <update id="updateLatestPaymentRecordForOrder">
+        UPDATE payment_record
+        SET pay_status = #{payStatus},
+            confirmed_by = #{confirmedBy},
+            confirmed_time = NOW(),
+            remark = CASE
+                WHEN #{remark} IS NULL OR #{remark} = '' THEN remark
+                ELSE #{remark}
+            END
+        WHERE order_id = #{orderId}
+            AND record_type = 'PAY'
+        ORDER BY id DESC
+        LIMIT 1
+    </update>
+
+    <!-- 更新订单状态 -->
+    <update id="updateOrderState">
+        UPDATE order_info
+        SET order_status = #{orderStatus},
+            pay_status = IF(#{payStatus} IS NULL, pay_status, #{payStatus}),
+            shipment_status = IF(#{shipmentStatus} IS NULL, shipment_status, #{shipmentStatus}),
+            updated_by = #{updatedBy},
+            updated_time = NOW()
+        WHERE id = #{orderId}
+            AND deleted = 0
+    </update>
+
+    <!-- 插入或更新物流信息 -->
+    <insert id="upsertShipmentInfo">
+        INSERT INTO shipment_info (
+            order_id,
+            ship_status,
+            carrier_name,
+            tracking_no,
+            proof_file_id,
+            ship_time,
+            sign_time,
+            logistics_remark,
+            created_by,
+            updated_by
+        ) VALUES (
+            #{orderId},
+            #{shipStatus},
+            #{carrierName},
+            #{trackingNo},
+            #{proofFileId},
+            #{shipTime},
+            NULL,
+            #{logisticsRemark},
+            #{createdBy},
+            #{updatedBy}
+        )
+        ON DUPLICATE KEY UPDATE
+            ship_status = VALUES(ship_status),
+            carrier_name = VALUES(carrier_name),
+            tracking_no = VALUES(tracking_no),
+            ship_time = VALUES(ship_time),
+            logistics_remark = VALUES(logistics_remark),
+            updated_by = VALUES(updated_by),
+            updated_time = CURRENT_TIMESTAMP
+    </insert>
+
+    <!-- 插入库存变更日志 -->
+    <insert id="insertProductStockLog">
+        INSERT INTO product_stock_log (
+            sku_id,
+            change_type,
+            change_qty,
+            before_qty,
+            after_qty,
+            biz_type,
+            biz_id,
+            remark,
+            operated_by
+        ) VALUES (
+            #{skuId},
+            #{changeType},
+            #{changeQty},
+            #{beforeQty},
+            #{afterQty},
+            #{bizType},
+            #{bizId},
+            #{remark},
+            #{operatedBy}
+        )
+    </insert>
+
+    <!-- 查询订单商品项用于调整 -->
+    <select id="selectOrderItemsForAdjust" resultType="com.telecom.scm.order.mapper.OrderItemForAdjustRow">
+        SELECT
+            CAST(id AS CHAR) AS orderItemId,
+            sku_id AS skuId,
+            quantity AS quantity,
+            final_unit_price AS finalUnitPrice,
+            final_amount AS finalAmount,
+            cost_price AS costPrice,
+            profit_amount AS profitAmount,
+            spu_name AS spuName,
+            sku_name AS skuName,
+            spec_text AS specText
+        FROM order_item
+        WHERE order_id = #{orderId}
+        ORDER BY id DESC
+    </select>
+
+    <!-- 更新订单商品项 -->
+    <update id="updateOrderItemForAdjust">
+        UPDATE order_item
+        SET quantity = #{quantity},
+            final_unit_price = #{finalUnitPrice},
+            final_amount = #{finalAmount},
+            profit_amount = #{profitAmount}
+        WHERE id = #{orderItemId}
+            AND order_id = #{orderId}
+    </update>
+
+    <!-- 插入订单商品项调整日志 -->
+    <insert id="insertOrderItemAdjustLog">
+        INSERT INTO order_item_adjust_log (
+            order_id,
+            order_item_id,
+            old_quantity,
+            new_quantity,
+            old_final_unit_price,
+            new_final_unit_price,
+            old_final_amount,
+            new_final_amount,
+            operator_id,
+            operator_name,
+            remark
+        ) VALUES (
+            #{orderId},
+            #{orderItemId},
+            #{oldQuantity},
+            #{newQuantity},
+            #{oldFinalUnitPrice},
+            #{newFinalUnitPrice},
+            #{oldFinalAmount},
+            #{newFinalAmount},
+            #{operatorId},
+            #{operatorName},
+            #{remark}
+        )
+    </insert>
+
+    <!-- 更新订单金额 -->
+    <update id="updateOrderAmounts">
+        UPDATE order_info
+        SET goods_amount = #{goodsAmount},
+            cost_amount = #{costAmount},
+            profit_amount = #{profitAmount},
+            pay_amount = #{payAmount},
+            updated_by = #{updatedBy},
+            updated_time = CURRENT_TIMESTAMP
+        WHERE id = #{orderId}
+            AND deleted = 0
+    </update>
+
+</mapper>

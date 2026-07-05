@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.telecom.scm.member.mapper.DashboardCountMapper">
+
+    <select id="countCustomerWaitPayOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM order_info o
+        JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        WHERE o.deleted = 0
+            AND o.order_status = 'WAIT_PAY'
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="countCustomerWaitReceiveOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM order_info o
+        JOIN customer_info customer ON customer.id = o.customer_id
+            AND customer.deleted = 0
+        WHERE o.deleted = 0
+            AND o.order_status = 'WAIT_RECEIVE'
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="countCustomerProcessingAftersales" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM aftersale_info a
+        JOIN customer_info customer ON customer.id = a.customer_id
+            AND customer.deleted = 0
+        WHERE a.deleted = 0
+            AND a.aftersale_status IN ('WAIT_AUDIT','WAIT_RETURN','WAIT_RECEIVE','WAIT_REFUND')
+            AND customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="sumCustomerCurrentPoints" resultType="java.lang.Long">
+        SELECT COALESCE((
+            SELECT pa.current_points
+            FROM point_account pa
+            JOIN customer_info customer ON customer.id = pa.customer_id
+                AND customer.deleted = 0
+            WHERE customer.member_id = (
+                SELECT u.member_id
+                FROM sys_user u
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+            LIMIT 1
+        ), 0)
+    </select>
+
+    <select id="countMerchantOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM order_info o
+        WHERE o.deleted = 0
+            AND o.merchant_id = (
+                SELECT merchant.id
+                FROM member_account ma
+                JOIN sys_user u ON u.member_id = ma.id
+                JOIN merchant_info merchant ON merchant.member_id = ma.id
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="sumMerchantOrderAmount" resultType="java.lang.Double">
+        SELECT COALESCE(SUM(o.pay_amount), 0)
+        FROM order_info o
+        WHERE o.deleted = 0
+            AND o.merchant_id = (
+                SELECT merchant.id
+                FROM member_account ma
+                JOIN sys_user u ON u.member_id = ma.id
+                JOIN merchant_info merchant ON merchant.member_id = ma.id
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="countMerchantPendingAuditOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM order_info o
+        WHERE o.deleted = 0
+            AND o.order_status = 'PENDING_AUDIT'
+            AND o.merchant_id = (
+                SELECT merchant.id
+                FROM member_account ma
+                JOIN sys_user u ON u.member_id = ma.id
+                JOIN merchant_info merchant ON merchant.member_id = ma.id
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="countMerchantPendingShipmentOrders" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM order_info o
+        WHERE o.deleted = 0
+            AND o.order_status = 'WAIT_SHIP'
+            AND o.merchant_id = (
+                SELECT merchant.id
+                FROM member_account ma
+                JOIN sys_user u ON u.member_id = ma.id
+                JOIN merchant_info merchant ON merchant.member_id = ma.id
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="countSupplierSpu" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM product_spu spu
+        WHERE spu.deleted = 0
+            AND spu.supplier_id = (
+                SELECT ma.id
+                FROM member_account ma
+                JOIN sys_user u ON u.member_id = ma.id
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="countSupplierSku" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM product_sku sku
+        JOIN product_spu spu ON spu.id = sku.spu_id AND spu.deleted = 0
+        WHERE sku.deleted = 0
+            AND spu.supplier_id = (
+                SELECT ma.id
+                FROM member_account ma
+                JOIN sys_user u ON u.member_id = ma.id
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+    <select id="countSupplierStockWarnings" resultType="java.lang.Long">
+        SELECT COUNT(1)
+        FROM product_sku sku
+        JOIN product_spu spu ON spu.id = sku.spu_id AND spu.deleted = 0
+        WHERE sku.deleted = 0
+            AND sku.stock_qty <![CDATA[<=]]> sku.safety_stock
+            AND spu.supplier_id = (
+                SELECT ma.id
+                FROM member_account ma
+                JOIN sys_user u ON u.member_id = ma.id
+                WHERE u.deleted = 0
+                    AND u.status = 'ENABLED'
+                    AND u.username = #{username}
+                LIMIT 1
+            )
+    </select>
+
+</mapper>
