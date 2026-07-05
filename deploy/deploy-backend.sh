@@ -36,29 +36,23 @@ echo "========================================"
 echo "开始部署后端：$VERSION"
 echo "========================================"
 
-# 1. 创建应用用户（如果不存在）
-if ! id -u app >/dev/null 2>&1; then
-    echo "创建 app 用户..."
-    sudo useradd -r -s /bin/false app || true
-fi
-
-# 2. 解压新版本
+# 1. 解压新版本
 mkdir -p "$EXTRACT_DIR"
 tar -xzf "$TAR_FILE" -C "$EXTRACT_DIR" --strip-components=1
 
-# 3. 备份当前版本
+# 2. 备份当前版本
 if [ -d "$CURRENT_DIR" ]; then
     echo "备份当前版本到 $BACKUP_DIR"
     mkdir -p "$BACKUP_DIR"
     cp -a "$CURRENT_DIR"/. "$BACKUP_DIR"/ || true
 fi
 
-# 4. 切换版本
+# 3. 切换版本
 mkdir -p "$BACKEND_DIR"
 rm -rf "$CURRENT_DIR"
 ln -sfn "$EXTRACT_DIR" "$CURRENT_DIR"
 
-# 5. 重命名 jar 为固定文件名（方便 systemd 配置）
+# 4. 重命名 jar 为固定文件名（方便 systemd 配置）
 JAR_FILE=$(find "$CURRENT_DIR" -maxdepth 1 -name "telecom-scm-backend*.jar" ! -name "original-*" | head -n 1)
 if [ -n "$JAR_FILE" ]; then
     mv "$JAR_FILE" "$CURRENT_DIR/telecom-scm-backend.jar"
@@ -67,9 +61,16 @@ else
     exit 1
 fi
 
+# 5. 确定应用运行用户（取 /opt/app 目录的属主，确保和 SSH 部署用户一致）
+APP_OWNER=$(stat -c '%U' "$APP_DIR" 2>/dev/null || echo "root")
+APP_GROUP=$(stat -c '%G' "$APP_DIR" 2>/dev/null || echo "root")
+if [ "$APP_OWNER" = "root" ]; then
+    echo "警告：/opt/app 属主是 root，建议改为普通用户"
+fi
+
 # 6. 确保上传目录存在并设置权限
 mkdir -p "$APP_DIR/uploads"
-chown -R app:app "$APP_DIR/uploads" "$CURRENT_DIR"
+chown -R "$APP_OWNER:$APP_GROUP" "$APP_DIR/uploads" "$CURRENT_DIR"
 
 # 7. 首次部署时自动安装 Nginx 站点配置（如果尚未安装）
 NGINX_CONF_SRC="$CURRENT_DIR/nginx/aixiaoya.site.conf"
@@ -88,7 +89,11 @@ fi
 
 # 8. 安装/更新 systemd 服务
 if [ -f "$CURRENT_DIR/systemd/backend.service" ]; then
-    sudo cp "$CURRENT_DIR/systemd/backend.service" "/etc/systemd/system/$SERVICE_NAME.service"
+    # 根据 /opt/app 属主自动替换服务文件中的运行用户
+    sed -e "s/APP_RUN_USER/$APP_OWNER/g" -e "s/APP_RUN_GROUP/$APP_GROUP/g" \
+        "$CURRENT_DIR/systemd/backend.service" > "/tmp/$SERVICE_NAME.service"
+    sudo cp "/tmp/$SERVICE_NAME.service" "/etc/systemd/system/$SERVICE_NAME.service"
+    rm -f "/tmp/$SERVICE_NAME.service"
     sudo systemctl daemon-reload
 fi
 

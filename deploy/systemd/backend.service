@@ -4,8 +4,8 @@ After=network.target mysql.service
 
 [Service]
 Type=simple
-User=app
-Group=app
+User=APP_RUN_USER
+Group=APP_RUN_GROUP
 
 WorkingDirectory=/opt/app/backend/current
 ExecStart=/usr/bin/java -jar /opt/app/backend/current/telecom-scm-backend.jar
