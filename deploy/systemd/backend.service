@@ -21,6 +21,9 @@ Environment="DB_USERNAME=root"
 Environment="DB_PASSWORD=CHANGE_ME"
 Environment="JWT_SECRET=CHANGE_ME_TO_A_LONG_RANDOM_STRING"
 
+# 优先从服务器本地 .env 读取敏感配置，避免每次部署被覆盖
+EnvironmentFile=-/opt/app/backend/.env
+
 Restart=always
 RestartSec=5
 
