@@ -5,8 +5,6 @@ import java.io.Serial;
 import com.baomidou.mybatisplus.annotation.TableName;
 
 import com.telecom.scm.common.base.BaseEntity;
-import com.telecom.scm.common.enums.AccountStatusEnum;
-
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -35,5 +33,5 @@ public class MemberAccountEntity extends BaseEntity {
     private String email;
 
     @Schema(description = "状态")
-    private AccountStatusEnum status;
+    private String status;
 }
