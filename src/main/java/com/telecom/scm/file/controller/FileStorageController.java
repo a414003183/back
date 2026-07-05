@@ -50,14 +50,22 @@ public class FileStorageController {
         } catch (IllegalArgumentException ignored) {
         }
 
-        return ResponseEntity.ok()
-                .contentType(mediaType)
-                .header(
-                        HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment()
+        ContentDisposition contentDisposition =
+                isInlineMediaType(mediaType)
+                        ? ContentDisposition.inline()
                                 .filename(payload.originalName(), StandardCharsets.UTF_8)
                                 .build()
-                                .toString())
+                        : ContentDisposition.attachment()
+                                .filename(payload.originalName(), StandardCharsets.UTF_8)
+                                .build();
+
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition.toString())
                 .body(payload.content());
+    }
+
+    private boolean isInlineMediaType(MediaType mediaType) {
+        return mediaType != null && "image".equalsIgnoreCase(mediaType.getType());
     }
 }

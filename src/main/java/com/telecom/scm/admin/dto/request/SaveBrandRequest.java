@@ -12,6 +12,5 @@ public record SaveBrandRequest(
         @Schema(description = "ID") Long id,
         @NotBlank(message = "brandName is required") @Schema(description = "Name") String brandName,
         @Schema(description = "Desc") String brandDesc,
-        @NotNull(message = "status is required") @Schema(description = "状态")
-                AccountStatusEnum status,
+        @Schema(description = "状态") AccountStatusEnum status,
         @Schema(description = "No") Integer sortNo) {}
