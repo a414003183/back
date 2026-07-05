@@ -33,12 +33,8 @@ jobs:
           cp deploy/deploy-backend.sh "deploy-pkg/"
           cp -r deploy/systemd "deploy-pkg/"
           cp -r deploy/nginx "deploy-pkg/"
-          echo "--- files in deploy-pkg ---"
-          ls -la deploy-pkg/
           # 直接打包 deploy-pkg 内的文件，不带 ./ 前缀
           cd deploy-pkg && tar -czf "../${VERSION}.tar.gz" . && cd ..
-          echo "--- tar contents ---"
-          tar -tzf "${VERSION}.tar.gz"
           echo "VERSION=${VERSION}" >> $GITHUB_ENV
 
       - name: Upload backend package to server

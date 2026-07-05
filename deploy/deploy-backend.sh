@@ -53,10 +53,6 @@ rm -rf "$CURRENT_DIR"
 ln -sfn "$EXTRACT_DIR" "$CURRENT_DIR"
 
 # 4. 重命名 jar 为固定文件名（方便 systemd 配置）
-echo "--- extract dir contents ($EXTRACT_DIR) ---"
-ls -la "$EXTRACT_DIR"
-echo "--- looking for jar ---"
-find "$EXTRACT_DIR" -maxdepth 2 -name "*.jar"
 JAR_FILE=$(find "$EXTRACT_DIR" -maxdepth 1 -name "telecom-scm-backend*.jar" ! -name "original-*" | head -n 1)
 if [ -n "$JAR_FILE" ]; then
     mv "$JAR_FILE" "$CURRENT_DIR/telecom-scm-backend.jar"
