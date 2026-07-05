@@ -71,13 +71,28 @@ fi
 mkdir -p "$APP_DIR/uploads"
 chown -R app:app "$APP_DIR/uploads" "$CURRENT_DIR"
 
-# 7. 安装/更新 systemd 服务
+# 7. 首次部署时自动安装 Nginx 站点配置（如果尚未安装）
+NGINX_CONF_SRC="$CURRENT_DIR/nginx/aixiaoya.site.conf"
+NGINX_CONF_DST="/etc/nginx/sites-available/aixiaoya.site"
+if [ -f "$NGINX_CONF_SRC" ] && [ ! -f "$NGINX_CONF_DST" ]; then
+    if command -v nginx >/dev/null 2>&1; then
+        echo "首次部署：安装 Nginx 站点配置..."
+        sudo cp "$NGINX_CONF_SRC" "$NGINX_CONF_DST"
+        sudo ln -sf "$NGINX_CONF_DST" /etc/nginx/sites-enabled/aixiaoya.site
+        sudo rm -f /etc/nginx/sites-enabled/default
+        sudo nginx -t && sudo systemctl reload nginx
+    else
+        echo "警告：未检测到 Nginx，跳过 Nginx 配置安装"
+    fi
+fi
+
+# 8. 安装/更新 systemd 服务
 if [ -f "$CURRENT_DIR/systemd/backend.service" ]; then
     sudo cp "$CURRENT_DIR/systemd/backend.service" "/etc/systemd/system/$SERVICE_NAME.service"
     sudo systemctl daemon-reload
 fi
 
-# 8. 启动/重启服务
+# 9. 启动/重启服务
 if systemctl is-active --quiet "$SERVICE_NAME"; then
     echo "重启后端服务..."
     sudo systemctl restart "$SERVICE_NAME"
@@ -87,7 +102,7 @@ else
     sudo systemctl start "$SERVICE_NAME"
 fi
 
-# 9. 健康检查
+# 10. 健康检查
 sleep 5
 if curl -fsS "http://127.0.0.1:8080/api/health" >/dev/null 2>&1; then
     echo "后端健康检查通过"
