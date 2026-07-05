@@ -38,7 +38,7 @@ echo "========================================"
 
 # 1. 解压新版本
 mkdir -p "$EXTRACT_DIR"
-tar -xzf "$TAR_FILE" -C "$EXTRACT_DIR" --strip-components=1
+tar -xzf "$TAR_FILE" -C "$EXTRACT_DIR"
 
 # 2. 备份当前版本
 if [ -d "$CURRENT_DIR" ]; then
