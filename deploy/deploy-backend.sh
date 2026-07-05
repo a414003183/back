@@ -72,19 +72,17 @@ fi
 mkdir -p "$APP_DIR/uploads"
 chown -R "$APP_OWNER:$APP_GROUP" "$APP_DIR/uploads" "$CURRENT_DIR"
 
-# 7. 首次部署时自动安装 Nginx 站点配置（如果尚未安装）
+# 7. 安装/更新 Nginx 站点配置
 NGINX_CONF_SRC="$CURRENT_DIR/nginx/aixiaoya.site.conf"
 NGINX_CONF_DST="/etc/nginx/sites-available/aixiaoya.site"
-if [ -f "$NGINX_CONF_SRC" ] && [ ! -f "$NGINX_CONF_DST" ]; then
-    if command -v nginx >/dev/null 2>&1; then
-        echo "首次部署：安装 Nginx 站点配置..."
-        sudo cp "$NGINX_CONF_SRC" "$NGINX_CONF_DST"
-        sudo ln -sf "$NGINX_CONF_DST" /etc/nginx/sites-enabled/aixiaoya.site
-        sudo rm -f /etc/nginx/sites-enabled/default
-        sudo nginx -t && sudo systemctl reload nginx
-    else
-        echo "警告：未检测到 Nginx，跳过 Nginx 配置安装"
-    fi
+if [ -f "$NGINX_CONF_SRC" ] && command -v nginx >/dev/null 2>&1; then
+    echo "更新 Nginx 站点配置..."
+    sudo cp "$NGINX_CONF_SRC" "$NGINX_CONF_DST"
+    sudo ln -sf "$NGINX_CONF_DST" /etc/nginx/sites-enabled/aixiaoya.site
+    sudo rm -f /etc/nginx/sites-enabled/default
+    sudo nginx -t && sudo systemctl reload nginx
+else
+    echo "警告：未检测到 Nginx，跳过 Nginx 配置更新"
 fi
 
 # 8. 安装/更新 systemd 服务
