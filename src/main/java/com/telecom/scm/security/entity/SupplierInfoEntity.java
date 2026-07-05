@@ -32,4 +32,7 @@ public class SupplierInfoEntity extends BaseEntity {
 
     @Schema(description = "状态")
     private String status;
+
+    @Schema(description = "备注")
+    private String remark;
 }
