@@ -76,6 +76,15 @@ chown -R "$APP_OWNER:$APP_GROUP" "$APP_DIR/uploads" "$CURRENT_DIR"
 NGINX_CONF_SRC="$CURRENT_DIR/nginx/aixiaoya.site.conf"
 NGINX_CONF_DST="/etc/nginx/sites-available/aixiaoya.site"
 if [ -f "$NGINX_CONF_SRC" ] && command -v nginx >/dev/null 2>&1; then
+    # 如果目标配置已存在且与本次发布包中的版本不同，先备份旧配置，
+    # 避免服务器上手动调整的配置被直接覆盖后无法找回。
+    if [ -f "$NGINX_CONF_DST" ] && ! cmp -s "$NGINX_CONF_SRC" "$NGINX_CONF_DST"; then
+        NGINX_BACKUP_DIR="$BACKUP_DIR/nginx"
+        mkdir -p "$NGINX_BACKUP_DIR"
+        echo "检测到 Nginx 配置与发布包不一致，先备份现有配置到 $NGINX_BACKUP_DIR"
+        sudo cp "$NGINX_CONF_DST" "$NGINX_BACKUP_DIR/aixiaoya.site.conf.bak"
+    fi
+
     echo "更新 Nginx 站点配置..."
     sudo cp "$NGINX_CONF_SRC" "$NGINX_CONF_DST"
     sudo ln -sf "$NGINX_CONF_DST" /etc/nginx/sites-enabled/aixiaoya.site
